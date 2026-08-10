@@ -8,11 +8,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 
-/**
- * The whole app is the web build in assets/ (index.html, style.css, app.js, manifest.json,
- * assets/*.png) running inside a single WebView. There's no native UI beyond this — all game
- * logic, state, and persistence live in app.js, using WebView's localStorage for saves.
- */
+// The whole app is the web build in assets/ (index.html, style.css, app.js,
+// manifest.json, and image assets) running inside a single WebView. There's
+// no native UI beyond this -- game logic, state, and persistence all live in
+// app.js, using WebView's localStorage for saves.
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
@@ -26,7 +25,7 @@ class MainActivity : AppCompatActivity() {
 
         webView.settings.apply {
             javaScriptEnabled = true
-            domStorageEnabled = true // required — the app saves your kingdom via localStorage
+            domStorageEnabled = true // required -- the app saves your kingdom via localStorage
             cacheMode = WebSettings.LOAD_DEFAULT
             allowFileAccess = true
         }
