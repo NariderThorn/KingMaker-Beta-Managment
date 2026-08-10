@@ -1,0 +1,67 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "com.statelandledger.app"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.statelandledger.app"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 3
+        versionName = "1.2.0"
+    }
+
+    // A fixed, committed debug keystore (android/debug.keystore) instead of the
+    // default per-machine one — CI runs on a fresh machine every time, so without
+    // this every release would get signed with a different key, and Android
+    // refuses to install a differently-signed "update" over an existing app,
+    // forcing an uninstall (and losing saved kingdoms) on every single release.
+    signingConfigs {
+        debug {
+            storeFile file("../debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.webkit:webkit:1.11.0")
+}
+
+// web/ is the one true source of the app — this copies it into the assets
+// folder automatically before every build, so nobody has to remember to
+// paste app.js/index.html into two places by hand ever again.
+tasks.register("copyWebAssets", Copy) {
+    from "../../web"
+    into "src/main/assets"
+    exclude ".DS_Store"
+}
+tasks.named("preBuild").configure {
+    dependsOn "copyWebAssets"
+}

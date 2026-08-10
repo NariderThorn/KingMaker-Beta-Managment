@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Downloaded APK updates land here via DownloadManager's
+         setDestinationInExternalFilesDir(..., Environment.DIRECTORY_DOWNLOADS, ...) -->
+    <external-files-path name="downloads" path="Download/" />
+</paths>
