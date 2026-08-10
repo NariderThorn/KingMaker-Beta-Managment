@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only Google Fonts is ever fetched over the network (for the app's custom
+     typefaces); everything else the app needs is bundled and loaded from
+     file:///android_asset/. If there's no connection, the CSS already falls
+     back to generic serif/sans-serif/monospace, so this is purely cosmetic. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
