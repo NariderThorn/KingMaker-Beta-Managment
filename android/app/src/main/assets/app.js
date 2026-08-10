@@ -129,42 +129,69 @@ function skillTrainedSource(skillName){
 }
 
 /* =====================================================================
-   PERSISTENCE
+   PERSISTENCE — multiple kingdoms live side by side:
+   kingdom-index -> [{id,name,government,level,updatedAt}, ...] (for the picker)
+   kingdom-data-<id> -> that kingdom's full state JSON
 ===================================================================== */
 let saveTimer = null;
-const LOCAL_KEY = 'kingdom-tracker-state';
+let currentKingdomId = null;
+let kingdomIndex = [];
+const KINGDOM_INDEX_KEY = 'kingdom-index';
+const LEGACY_KEY = 'kingdom-tracker-state'; // single-save key from before multi-kingdom support
 
-async function persistSave(json){
+function newId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function kingdomDataKey(id){ return 'kingdom-data-'+id; }
+
+async function storageSet(key, json){
   if(window.storage && typeof window.storage.set === 'function'){
-    try{ await window.storage.set('kingdom-state', json); return; }
+    try{ await window.storage.set(key, json); return; }
     catch(e){ /* fall through to localStorage */ }
   }
-  try{ localStorage.setItem(LOCAL_KEY, json); }
+  try{ localStorage.setItem(key, json); }
   catch(e){ console.error('save failed', e); }
 }
-async function persistLoad(){
+async function storageGet(key){
   if(window.storage && typeof window.storage.get === 'function'){
     try{
-      const res = await window.storage.get('kingdom-state');
+      const res = await window.storage.get(key);
       if(res && res.value) return res.value;
     }catch(e){ /* fall through to localStorage */ }
   }
   try{
-    const v = localStorage.getItem(LOCAL_KEY);
+    const v = localStorage.getItem(key);
     if(v) return v;
   }catch(e){}
   return null;
 }
+async function storageRemove(key){
+  if(window.storage && typeof window.storage.delete === 'function'){
+    try{ await window.storage.delete(key); }catch(e){}
+  }
+  try{ localStorage.removeItem(key); }catch(e){}
+}
+
+async function loadKingdomIndex(){
+  const raw = await storageGet(KINGDOM_INDEX_KEY);
+  try{ const list = raw ? JSON.parse(raw) : []; return Array.isArray(list) ? list : []; }
+  catch(e){ return []; }
+}
+async function saveKingdomIndex(list){ await storageSet(KINGDOM_INDEX_KEY, JSON.stringify(list)); }
+function indexSummary(id, s){
+  return { id, name: s.name || 'Unnamed Realm', government: (s.creation && s.creation.government) || '', level: s.level || 1, updatedAt: Date.now() };
+}
+async function saveCurrentKingdom(){
+  if(!currentKingdomId || !state) return;
+  await storageSet(kingdomDataKey(currentKingdomId), JSON.stringify(state));
+  const idx = kingdomIndex.findIndex(k=>k.id===currentKingdomId);
+  const summary = indexSummary(currentKingdomId, state);
+  if(idx>=0) kingdomIndex[idx] = summary; else kingdomIndex.push(summary);
+  await saveKingdomIndex(kingdomIndex);
+}
 function scheduleSave(){
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(()=>{ persistSave(JSON.stringify(state)); }, 300);
+  saveTimer = setTimeout(saveCurrentKingdom, 300);
 }
-function applyLoadedState(raw){
-  try{
-    state = raw ? JSON.parse(raw) : DEFAULT_STATE();
-  }catch(e){
-    state = DEFAULT_STATE();
-  }
+function normalizeState(){
   const d = DEFAULT_STATE();
   for(const k in d){ if(!(k in state)) state[k]=d[k]; }
   if(!state.creation) state.creation = d.creation;
@@ -176,18 +203,57 @@ function applyLoadedState(raw){
   for(const r of ROLES){ if(!state.leaders[r[0]]) state.leaders[r[0]]={name:'',invested:false,vacant:false}; }
   for(const g of GOODS){ if(state.goods[g]===undefined) state.goods[g]=0; }
   if(!state.hexes) state.hexes={};
-  // migrate a pre-overhaul save: flat government/heartland -> creation object
   if(state.government && !state.creation.government){ state.creation.government = state.government; }
   if(state.heartland && state.heartland.terrain && !state.creation.heartland){ state.creation.heartland = state.heartland.terrain; }
-  // any save with real progress should skip the creation screen, even if `started` predates this version
-  if(state.started===undefined || state.started===false){
-    state.started = !!(state.name && state.name!=='Unnamed Realm') || !!state.creation.government;
+  state.started = true;
+}
+async function migrateLegacySaveIfNeeded(){
+  const index = await loadKingdomIndex();
+  if(index.length > 0) return index;
+  const legacyRaw = await storageGet(LEGACY_KEY);
+  if(!legacyRaw) return index;
+  try{
+    const legacyState = JSON.parse(legacyRaw);
+    if(!legacyState || !legacyState.started) return index;
+    const id = newId();
+    await storageSet(kingdomDataKey(id), JSON.stringify(legacyState));
+    index.push(indexSummary(id, legacyState));
+    await saveKingdomIndex(index);
+  }catch(e){ /* corrupt legacy data — nothing to migrate */ }
+  return index;
+}
+async function openKingdom(id){
+  const raw = await storageGet(kingdomDataKey(id));
+  if(!raw){
+    alert("Could not find that kingdom's data — it may have been deleted.");
+    kingdomIndex = await loadKingdomIndex();
+    renderCreationScreen();
+    return;
   }
+  try{ state = JSON.parse(raw); }
+  catch(e){ alert("That kingdom's save data looks corrupted and could not be opened."); return; }
+  normalizeState();
+  currentKingdomId = id;
+  enterMainApp();
+}
+function confirmDeleteKingdom(id){
+  const k = kingdomIndex.find(x=>x.id===id);
+  const name = k ? k.name : 'this kingdom';
+  if(!confirm(`Delete "${name}" permanently? This can't be undone — export a backup first from its Overview tab if you want to keep it.`)) return;
+  deleteKingdom(id);
+}
+async function deleteKingdom(id){
+  await storageRemove(kingdomDataKey(id));
+  kingdomIndex = kingdomIndex.filter(k=>k.id!==id);
+  await saveKingdomIndex(kingdomIndex);
+  if(id===currentKingdomId){ currentKingdomId=null; state=null; }
+  renderCreationScreen();
 }
 async function loadState(){
-  const raw = await persistLoad();
-  applyLoadedState(raw);
-  boot();
+  kingdomIndex = await migrateLegacySaveIfNeeded();
+  currentKingdomId = null;
+  state = null;
+  showKingdomPicker();
 }
 function exportState(){
   const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
@@ -205,21 +271,20 @@ function exportState(){
 function importStateFile(fileInput){
   const file = fileInput.files[0];
   if(!file) return;
-  if(state.started && !confirm(`This replaces "${state.name}" — your currently saved kingdom — with whatever is in this file. Continue?`)){
-    fileInput.value=''; return;
-  }
   const reader = new FileReader();
-  reader.onload = (e)=>{
-    try{ JSON.parse(e.target.result); }
+  reader.onload = async (e)=>{
+    let parsed;
+    try{ parsed = JSON.parse(e.target.result); }
     catch(err){
-      alert('That file isn\'t valid kingdom data — nothing was changed.');
+      alert("That file isn't valid kingdom data — nothing was changed.");
       fileInput.value=''; return;
     }
-    applyLoadedState(e.target.result);
-    forceShowCreation = false;
-    scheduleSave();
+    state = parsed;
+    normalizeState();
+    currentKingdomId = newId();
     fileInput.value='';
-    boot();
+    await saveCurrentKingdom();
+    enterMainApp();
   };
   reader.readAsText(file);
 }
@@ -236,38 +301,32 @@ function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, c=>({'&':'&amp;',
 function escapeAttr(str){ return escapeHtml(str); }
 
 /* =====================================================================
-   BOOT — decide creation screen vs main app
+   BOOT — the kingdom picker shows every launch; opening one enters the app
 ===================================================================== */
-let forceShowCreation = false; // transient — lets you browse to the welcome screen without touching saved data
-function boot(){
-  if(!state.started || forceShowCreation){
-    document.getElementById('creation-screen').style.display='flex';
-    document.getElementById('main-app').style.display='none';
-    document.querySelector('nav.bottom').style.display='none';
-    if(!state.started) creationStep = 0;
-    renderCreationScreen();
-  } else {
-    document.getElementById('creation-screen').style.display='none';
-    document.getElementById('main-app').style.display='block';
-    document.querySelector('nav.bottom').style.display='flex';
-    render();
-    buildHexGrid();
-  }
-}
-function openSwitchKingdom(){
-  forceShowCreation = true;
+function showKingdomPicker(){
   creationStep = 0;
-  boot();
+  document.getElementById('creation-screen').style.display='flex';
+  document.getElementById('main-app').style.display='none';
+  document.querySelector('nav.bottom').style.display='none';
+  renderCreationScreen();
 }
+function enterMainApp(){
+  document.getElementById('creation-screen').style.display='none';
+  document.getElementById('main-app').style.display='block';
+  document.querySelector('nav.bottom').style.display='flex';
+  render();
+  buildHexGrid();
+}
+function openSwitchKingdom(){ showKingdomPicker(); }
 function closeSwitchKingdom(){
-  forceShowCreation = false;
-  boot();
+  if(!currentKingdomId || !state) return;
+  enterMainApp();
 }
 
 /* =====================================================================
    CREATION SCREEN
 ===================================================================== */
-let creationStep = 0; // 0 = welcome, 1 charter, 2 heartland, 3 government, 4 bonus boosts, 5 name
+let creationStep = 0; // 0 = picker, 1 charter, 2 heartland, 3 government, 4 bonus boosts, 5 name
 let draft = null;
 const CREATION_STEP_COUNT = 5;
 
@@ -297,22 +356,30 @@ function renderCreationScreen(){
   let body = '';
 
   if(creationStep===0){
-    const hasExisting = state.started;
+    const hasCurrent = !!(state && currentKingdomId);
+    const rows = kingdomIndex.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
     body = `
       <div class="creation-crest">
         <div class="glyph">⬡</div>
         <h1>Kingdom Ledger</h1>
         <div class="tag">Stolen Lands</div>
       </div>
-      <div class="load-choice">
-        ${hasExisting ? `<button class="action" onclick="closeSwitchKingdom()">← Back to ${escapeHtml(state.name)}</button>` : ''}
-        <button class="${hasExisting?'ghost':'action'}" onclick="startCreation()">Create New Kingdom</button>
-        <input type="file" accept="application/json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
-        <button class="ghost" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>
-      </div>
-      ${hasExisting
-        ? `<div class="hint" style="text-align:center;margin-top:14px;">Creating a new kingdom or loading a file will replace what's currently saved on this device. Export a backup first from Overview if you want to keep it.</div>`
-        : `<div class="hint" style="text-align:center;margin-top:14px;">If you already have a kingdom saved on this device, it'll load automatically — this screen only shows up before your first save.</div>`}`;
+      ${hasCurrent ? `<button class="action" onclick="closeSwitchKingdom()">← Back to ${escapeHtml(state.name)}</button>` : ''}
+      <button class="${hasCurrent?'ghost':'action'}" style="margin-top:8px;" onclick="startCreation()">+ New Kingdom</button>
+      ${rows.length ? `
+        <div class="hint" style="margin:16px 0 6px;">Your kingdoms</div>
+        <div class="kingdom-list">
+          ${rows.map(k=>`
+            <div class="kingdom-row ${k.id===currentKingdomId?'current':''}">
+              <button type="button" class="kingdom-row-open" onclick="openKingdom('${k.id}')">
+                <div class="opt-name">${escapeHtml(k.name)}</div>
+                <div class="opt-detail">${k.government?escapeHtml(k.government)+' · ':''}Level ${k.level}${k.updatedAt?' · '+new Date(k.updatedAt).toLocaleDateString():''}</div>
+              </button>
+              <button type="button" class="kingdom-row-delete" onclick="confirmDeleteKingdom('${k.id}')" title="Delete">✕</button>
+            </div>`).join('')}
+        </div>` : ''}
+      <input type="file" accept="application/json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
+      <button class="ghost" style="margin-top:14px;" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>`;
   }
 
   else if(creationStep===1){
@@ -413,15 +480,11 @@ function pickGovernmentFreeBoost(a){ draft.governmentFreeBoost=a; renderCreation
 function pickBonusBoost1(a){ draft.bonusBoost1=a; renderCreationScreen(); }
 function pickBonusBoost2(a){ draft.bonusBoost2=a; renderCreationScreen(); }
 
-function finishCreation(btn){
+async function finishCreation(btn){
   // prove the click was received, before anything else runs, regardless of what happens next
   if(btn){ btn.textContent = 'Founding…'; btn.style.opacity = '0.7'; }
   try{
-    if(state.started && !confirm(`This replaces "${state.name}" — your currently saved kingdom. Export a backup first from Overview if you want to keep it. Continue?`)){
-      if(btn){ btn.textContent = 'Found Your Kingdom'; btn.style.opacity = '1'; }
-      return;
-    }
-    if(!draft){ alert('Something reset your progress — please go through the steps again.'); forceShowCreation=false; creationStep=0; renderCreationScreen(); return; }
+    if(!draft){ alert('Something reset your progress — please go through the steps again.'); creationStep=0; renderCreationScreen(); return; }
     state = DEFAULT_STATE();
     state.started = true;
     state.name = (draft.name||'').trim() || 'Unnamed Realm';
@@ -436,9 +499,9 @@ function finishCreation(btn){
     if(GOVERNMENTS[draft.government]){
       GOVERNMENTS[draft.government].skills.forEach(sk=>{ state.skills[sk].rank='T'; });
     }
-    forceShowCreation = false;
-    scheduleSave();
-    boot();
+    currentKingdomId = newId();
+    await saveCurrentKingdom();
+    enterMainApp();
     startPickCapital();
   } catch(e){
     console.error('finishCreation failed:', e);
