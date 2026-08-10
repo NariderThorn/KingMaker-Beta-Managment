@@ -11,6 +11,19 @@
     --rust:#B15C42;
     --blue:#5B87A6;
   }
+.kingdom-list{display:flex;flex-direction:column;gap:8px;}
+.kingdom-row{display:flex;gap:8px;align-items:stretch;}
+.kingdom-row-open{
+  flex:1;text-align:left;background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;cursor:pointer;color:var(--text);font-family:'Inter',sans-serif;
+}
+.kingdom-row-open:active{background:var(--surface-raised);}
+.kingdom-row.current .kingdom-row-open{border-color:var(--gold);background:rgba(201,162,75,0.08);}
+.kingdom-row-delete{
+  flex:0 0 44px;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  color:var(--rust);font-size:16px;cursor:pointer;
+}
+.kingdom-row-delete:active{background:rgba(177,92,66,0.15);}
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;background:#12181B;}
   body{
