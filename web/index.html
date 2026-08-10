@@ -109,6 +109,14 @@
           <option value="Hazard">Hazard</option>
         </select>
       </div>
+      <div class="row">
+        <div class="label">Resources</div>
+        <input type="text" id="hex-resources" class="wide" style="max-width:190px;" placeholder="e.g. Timber, Game">
+      </div>
+      <div class="row">
+        <div class="label">Features</div>
+        <input type="text" id="hex-features" class="wide" style="max-width:190px;" placeholder="e.g. Ravine, Ruins">
+      </div>
       <textarea class="wide" id="hex-note" rows="3" placeholder="Notes about this hex..." style="margin-top:8px;"></textarea>
       <button class="action" onclick="saveHex()">Save hex</button>
       <button class="ghost" style="margin-top:8px;" onclick="closeHexPanel()">Close</button>
@@ -119,7 +127,7 @@
   <!-- NOTES -->
   <section class="tab-panel" id="tab-notes">
     <div class="card">
-      <h3>Settlements</h3>
+      <h3>Settlements <a href="https://2e.aonprd.com/Rules.aspx?ID=1819" target="_blank" rel="noopener" class="sub" style="text-decoration:underline;">rules ↗</a></h3>
       <div id="settlements-list"></div>
       <button class="ghost" onclick="addSettlement()">+ Found a settlement</button>
     </div>
