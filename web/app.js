@@ -47,6 +47,54 @@ const STORY_NPCS = [
   'Oleg Leveton','Svetlana Leveton'
 ];
 const STORY_NPC_BONUS = {};
+
+// Kingdom Feats — names, levels, and prerequisites are game facts (not
+// copyrightable); "effect" is our own short paraphrase of the mechanic, not
+// Paizo's published wording. Sourced from the Kingmaker Player's Guide,
+// which only covers feats up through level 11 — higher levels use the
+// freeform "type your own" fallback in the level-up popup instead.
+const KINGDOM_FEATS = {
+  'Civil Service':          {level:1,  prereq:null, effect:'Pick a leadership role — it stops taking a vacancy penalty even if unfilled. +2 status bonus to New Leadership checks.'},
+  'Cooperative Leadership':  {level:1,  prereq:null, effect:'Aiding another leader through Focused Attention grants a bigger bonus than normal.'},
+  'Crush Dissent':          {level:1,  prereq:{skill:'Warfare'}, effect:'Once per turn, attempt a Warfare check to cancel Unrest you were about to gain.'},
+  'Fortified Fiefs':        {level:1,  prereq:{skill:'Defense'}, effect:'Bonus to Fortify Hex checks and to building or repairing defensive structures.'},
+  'Insider Trading':        {level:1,  prereq:{skill:'Industry'}, effect:'Bonus to trade-related activities, plus one bonus Resource Die every turn.', resourceDie:1},
+  'Kingdom Assurance':      {level:1,  prereq:{skillCount:3}, repeatable:true, effect:'Once per turn, take a fixed result instead of rolling for a chosen trained skill.'},
+  'Muddle Through':         {level:1,  prereq:{skill:'Wilderness'}, effect:'Raises two of your Ruin thresholds by 1 and one of them by 2.'},
+  'Practical Magic':        {level:1,  prereq:{skill:'Magic'}, effect:'Bonus to Magic checks, and Magic can be used in place of Engineering checks.', skillBonus:{skill:'Magic', amt:1}},
+  'Pull Together':          {level:1,  prereq:{skill:'Politics'}, effect:'Once per turn, a flat check can downgrade a critical failure to a regular failure.'},
+  'Skill Training':         {level:1,  prereq:null, repeatable:true, effect:'Become trained in a Kingdom skill of your choice.', trainsSkill:true},
+  'Endure Anarchy':         {level:3,  prereq:{ability:'Loyalty', min:14}, effect:'Unrest-reducing activities remove extra Unrest once it\u2019s high; anarchy kicks in later than normal.'},
+  'Inspiring Entertainment':{level:3,  prereq:{ability:'Culture', min:14}, effect:'Can use Culture instead of Loyalty for the Unrest check, with a bonus while any Unrest is present.'},
+  'Liquidate Resources':    {level:3,  prereq:{ability:'Economy', min:14}, effect:'Once per turn, avoid dropping to 0 RP at the cost of fewer Resource Dice next turn.'},
+  'Quick Recovery':         {level:3,  prereq:{ability:'Stability', min:14}, effect:'Bonus to checks made to end an ongoing harmful kingdom event.'},
+  'Free and Fair':          {level:7,  prereq:null, effect:'Bonus to Loyalty checks for New Leadership and Pledge of Fealty; failures can be rerolled for RP.'},
+  'Quality of Life':        {level:7,  prereq:null, effect:'Reduces the kingdom\u2019s cost-of-living expenses.'},
+  'Fame and Fortune':       {level:11, prereq:null, effect:'Critical successes on Kingdom skill checks grant a bonus Resource Die next turn.'}
+};
+function featPrereqMet(name){
+  const f = KINGDOM_FEATS[name];
+  if(!f || !f.prereq) return true;
+  if(f.prereq.skill) return state.skills[f.prereq.skill] && state.skills[f.prereq.skill].rank !== 'U';
+  if(f.prereq.ability) return abilityScore(f.prereq.ability) >= f.prereq.min;
+  if(f.prereq.skillCount) return Object.values(state.skills).filter(s=>s.rank!=='U').length >= f.prereq.skillCount;
+  return true;
+}
+function featAlreadyTaken(name){
+  return state.kingdomFeats.some(f=>f.name===name);
+}
+function featSkillBonus(skillName){
+  return state.kingdomFeats.reduce((sum,f)=>{
+    const def = KINGDOM_FEATS[f.name];
+    return (def && def.skillBonus && def.skillBonus.skill===skillName) ? sum+def.skillBonus.amt : sum;
+  }, 0);
+}
+function featResourceDieBonus(){
+  return state.kingdomFeats.reduce((sum,f)=>{
+    const def = KINGDOM_FEATS[f.name];
+    return (def && def.resourceDie) ? sum+def.resourceDie : sum;
+  }, 0);
+}
 const HEX_TYPE_SYMBOLS = {
   'Capital':'♜\uFE0E', 'Claimed Territory':'⚑\uFE0E',
   'Settlement':'⌂\uFE0E', 'Friendly Camp':'⚐\uFE0E', 'Enemy Base':'⚔\uFE0E',
@@ -69,6 +117,12 @@ function sizeRow(size){
   if(size<50) return {die:'1d8', mod:2, storage:12, type:'State'};
   if(size<100) return {die:'1d10', mod:3, storage:16, type:'Country'};
   return {die:'1d12', mod:4, storage:20, type:'Dominion'};
+}
+const CLAIMED_HEX_TYPES = ['Capital','Claimed Territory','Settlement'];
+// Kingdom Size is the number of hexes you've claimed (AoN Rules.aspx?ID=1781) — computed
+// fresh from the map rather than hand-typed, same spirit as the ability-score engine below.
+function claimedHexCount(){
+  return Object.values(state.hexes).filter(h=>h && CLAIMED_HEX_TYPES.includes(h.type)).length;
 }
 const CONTROL_DC_BY_LEVEL = {1:14,2:15,3:16,4:18,5:20,6:22,7:23,8:24,9:26,10:27,11:28,12:30,13:31,14:32,15:34,16:35,17:36,18:38,19:39,20:40};
 
@@ -129,42 +183,69 @@ function skillTrainedSource(skillName){
 }
 
 /* =====================================================================
-   PERSISTENCE
+   PERSISTENCE — multiple kingdoms live side by side:
+   kingdom-index -> [{id,name,government,level,updatedAt}, ...] (for the picker)
+   kingdom-data-<id> -> that kingdom's full state JSON
 ===================================================================== */
 let saveTimer = null;
-const LOCAL_KEY = 'kingdom-tracker-state';
+let currentKingdomId = null;
+let kingdomIndex = [];
+const KINGDOM_INDEX_KEY = 'kingdom-index';
+const LEGACY_KEY = 'kingdom-tracker-state'; // single-save key from before multi-kingdom support
 
-async function persistSave(json){
+function newId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function kingdomDataKey(id){ return 'kingdom-data-'+id; }
+
+async function storageSet(key, json){
   if(window.storage && typeof window.storage.set === 'function'){
-    try{ await window.storage.set('kingdom-state', json); return; }
+    try{ await window.storage.set(key, json); return; }
     catch(e){ /* fall through to localStorage */ }
   }
-  try{ localStorage.setItem(LOCAL_KEY, json); }
+  try{ localStorage.setItem(key, json); }
   catch(e){ console.error('save failed', e); }
 }
-async function persistLoad(){
+async function storageGet(key){
   if(window.storage && typeof window.storage.get === 'function'){
     try{
-      const res = await window.storage.get('kingdom-state');
+      const res = await window.storage.get(key);
       if(res && res.value) return res.value;
     }catch(e){ /* fall through to localStorage */ }
   }
   try{
-    const v = localStorage.getItem(LOCAL_KEY);
+    const v = localStorage.getItem(key);
     if(v) return v;
   }catch(e){}
   return null;
 }
+async function storageRemove(key){
+  if(window.storage && typeof window.storage.delete === 'function'){
+    try{ await window.storage.delete(key); }catch(e){}
+  }
+  try{ localStorage.removeItem(key); }catch(e){}
+}
+
+async function loadKingdomIndex(){
+  const raw = await storageGet(KINGDOM_INDEX_KEY);
+  try{ const list = raw ? JSON.parse(raw) : []; return Array.isArray(list) ? list : []; }
+  catch(e){ return []; }
+}
+async function saveKingdomIndex(list){ await storageSet(KINGDOM_INDEX_KEY, JSON.stringify(list)); }
+function indexSummary(id, s){
+  return { id, name: s.name || 'Unnamed Realm', government: (s.creation && s.creation.government) || '', level: s.level || 1, updatedAt: Date.now() };
+}
+async function saveCurrentKingdom(){
+  if(!currentKingdomId || !state) return;
+  await storageSet(kingdomDataKey(currentKingdomId), JSON.stringify(state));
+  const idx = kingdomIndex.findIndex(k=>k.id===currentKingdomId);
+  const summary = indexSummary(currentKingdomId, state);
+  if(idx>=0) kingdomIndex[idx] = summary; else kingdomIndex.push(summary);
+  await saveKingdomIndex(kingdomIndex);
+}
 function scheduleSave(){
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(()=>{ persistSave(JSON.stringify(state)); }, 300);
+  saveTimer = setTimeout(saveCurrentKingdom, 300);
 }
-function applyLoadedState(raw){
-  try{
-    state = raw ? JSON.parse(raw) : DEFAULT_STATE();
-  }catch(e){
-    state = DEFAULT_STATE();
-  }
+function normalizeState(){
   const d = DEFAULT_STATE();
   for(const k in d){ if(!(k in state)) state[k]=d[k]; }
   if(!state.creation) state.creation = d.creation;
@@ -176,18 +257,57 @@ function applyLoadedState(raw){
   for(const r of ROLES){ if(!state.leaders[r[0]]) state.leaders[r[0]]={name:'',invested:false,vacant:false}; }
   for(const g of GOODS){ if(state.goods[g]===undefined) state.goods[g]=0; }
   if(!state.hexes) state.hexes={};
-  // migrate a pre-overhaul save: flat government/heartland -> creation object
   if(state.government && !state.creation.government){ state.creation.government = state.government; }
   if(state.heartland && state.heartland.terrain && !state.creation.heartland){ state.creation.heartland = state.heartland.terrain; }
-  // any save with real progress should skip the creation screen, even if `started` predates this version
-  if(state.started===undefined || state.started===false){
-    state.started = !!(state.name && state.name!=='Unnamed Realm') || !!state.creation.government;
+  state.started = true;
+}
+async function migrateLegacySaveIfNeeded(){
+  const index = await loadKingdomIndex();
+  if(index.length > 0) return index;
+  const legacyRaw = await storageGet(LEGACY_KEY);
+  if(!legacyRaw) return index;
+  try{
+    const legacyState = JSON.parse(legacyRaw);
+    if(!legacyState || !legacyState.started) return index;
+    const id = newId();
+    await storageSet(kingdomDataKey(id), JSON.stringify(legacyState));
+    index.push(indexSummary(id, legacyState));
+    await saveKingdomIndex(index);
+  }catch(e){ /* corrupt legacy data — nothing to migrate */ }
+  return index;
+}
+async function openKingdom(id){
+  const raw = await storageGet(kingdomDataKey(id));
+  if(!raw){
+    alert("Could not find that kingdom's data — it may have been deleted.");
+    kingdomIndex = await loadKingdomIndex();
+    renderCreationScreen();
+    return;
   }
+  try{ state = JSON.parse(raw); }
+  catch(e){ alert("That kingdom's save data looks corrupted and could not be opened."); return; }
+  normalizeState();
+  currentKingdomId = id;
+  enterMainApp();
+}
+function confirmDeleteKingdom(id){
+  const k = kingdomIndex.find(x=>x.id===id);
+  const name = k ? k.name : 'this kingdom';
+  if(!confirm(`Delete "${name}" permanently? This can't be undone — export a backup first from its Overview tab if you want to keep it.`)) return;
+  deleteKingdom(id);
+}
+async function deleteKingdom(id){
+  await storageRemove(kingdomDataKey(id));
+  kingdomIndex = kingdomIndex.filter(k=>k.id!==id);
+  await saveKingdomIndex(kingdomIndex);
+  if(id===currentKingdomId){ currentKingdomId=null; state=null; }
+  renderCreationScreen();
 }
 async function loadState(){
-  const raw = await persistLoad();
-  applyLoadedState(raw);
-  boot();
+  kingdomIndex = await migrateLegacySaveIfNeeded();
+  currentKingdomId = null;
+  state = null;
+  showKingdomPicker();
 }
 function exportState(){
   const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
@@ -205,21 +325,20 @@ function exportState(){
 function importStateFile(fileInput){
   const file = fileInput.files[0];
   if(!file) return;
-  if(state.started && !confirm(`This replaces "${state.name}" — your currently saved kingdom — with whatever is in this file. Continue?`)){
-    fileInput.value=''; return;
-  }
   const reader = new FileReader();
-  reader.onload = (e)=>{
-    try{ JSON.parse(e.target.result); }
+  reader.onload = async (e)=>{
+    let parsed;
+    try{ parsed = JSON.parse(e.target.result); }
     catch(err){
-      alert('That file isn\'t valid kingdom data — nothing was changed.');
+      alert("That file isn't valid kingdom data — nothing was changed.");
       fileInput.value=''; return;
     }
-    applyLoadedState(e.target.result);
-    forceShowCreation = false;
-    scheduleSave();
+    state = parsed;
+    normalizeState();
+    currentKingdomId = newId();
     fileInput.value='';
-    boot();
+    await saveCurrentKingdom();
+    enterMainApp();
   };
   reader.readAsText(file);
 }
@@ -236,38 +355,32 @@ function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, c=>({'&':'&amp;',
 function escapeAttr(str){ return escapeHtml(str); }
 
 /* =====================================================================
-   BOOT — decide creation screen vs main app
+   BOOT — the kingdom picker shows every launch; opening one enters the app
 ===================================================================== */
-let forceShowCreation = false; // transient — lets you browse to the welcome screen without touching saved data
-function boot(){
-  if(!state.started || forceShowCreation){
-    document.getElementById('creation-screen').style.display='flex';
-    document.getElementById('main-app').style.display='none';
-    document.querySelector('nav.bottom').style.display='none';
-    if(!state.started) creationStep = 0;
-    renderCreationScreen();
-  } else {
-    document.getElementById('creation-screen').style.display='none';
-    document.getElementById('main-app').style.display='block';
-    document.querySelector('nav.bottom').style.display='flex';
-    render();
-    buildHexGrid();
-  }
-}
-function openSwitchKingdom(){
-  forceShowCreation = true;
+function showKingdomPicker(){
   creationStep = 0;
-  boot();
+  document.getElementById('creation-screen').style.display='flex';
+  document.getElementById('main-app').style.display='none';
+  document.querySelector('nav.bottom').style.display='none';
+  renderCreationScreen();
 }
+function enterMainApp(){
+  document.getElementById('creation-screen').style.display='none';
+  document.getElementById('main-app').style.display='block';
+  document.querySelector('nav.bottom').style.display='flex';
+  render();
+  buildHexGrid();
+}
+function openSwitchKingdom(){ showKingdomPicker(); }
 function closeSwitchKingdom(){
-  forceShowCreation = false;
-  boot();
+  if(!currentKingdomId || !state) return;
+  enterMainApp();
 }
 
 /* =====================================================================
    CREATION SCREEN
 ===================================================================== */
-let creationStep = 0; // 0 = welcome, 1 charter, 2 heartland, 3 government, 4 bonus boosts, 5 name
+let creationStep = 0; // 0 = picker, 1 charter, 2 heartland, 3 government, 4 bonus boosts, 5 name
 let draft = null;
 const CREATION_STEP_COUNT = 5;
 
@@ -297,22 +410,30 @@ function renderCreationScreen(){
   let body = '';
 
   if(creationStep===0){
-    const hasExisting = state.started;
+    const hasCurrent = !!(state && currentKingdomId);
+    const rows = kingdomIndex.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
     body = `
       <div class="creation-crest">
         <div class="glyph">⬡</div>
         <h1>Kingdom Ledger</h1>
         <div class="tag">Stolen Lands</div>
       </div>
-      <div class="load-choice">
-        ${hasExisting ? `<button class="action" onclick="closeSwitchKingdom()">← Back to ${escapeHtml(state.name)}</button>` : ''}
-        <button class="${hasExisting?'ghost':'action'}" onclick="startCreation()">Create New Kingdom</button>
-        <input type="file" accept="application/json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
-        <button class="ghost" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>
-      </div>
-      ${hasExisting
-        ? `<div class="hint" style="text-align:center;margin-top:14px;">Creating a new kingdom or loading a file will replace what's currently saved on this device. Export a backup first from Overview if you want to keep it.</div>`
-        : `<div class="hint" style="text-align:center;margin-top:14px;">If you already have a kingdom saved on this device, it'll load automatically — this screen only shows up before your first save.</div>`}`;
+      ${hasCurrent ? `<button class="action" onclick="closeSwitchKingdom()">← Back to ${escapeHtml(state.name)}</button>` : ''}
+      <button class="${hasCurrent?'ghost':'action'}" style="margin-top:8px;" onclick="startCreation()">+ New Kingdom</button>
+      ${rows.length ? `
+        <div class="hint" style="margin:16px 0 6px;">Your kingdoms</div>
+        <div class="kingdom-list">
+          ${rows.map(k=>`
+            <div class="kingdom-row ${k.id===currentKingdomId?'current':''}">
+              <button type="button" class="kingdom-row-open" onclick="openKingdom('${k.id}')">
+                <div class="opt-name">${escapeHtml(k.name)}</div>
+                <div class="opt-detail">${k.government?escapeHtml(k.government)+' · ':''}Level ${k.level}${k.updatedAt?' · '+new Date(k.updatedAt).toLocaleDateString():''}</div>
+              </button>
+              <button type="button" class="kingdom-row-delete" onclick="confirmDeleteKingdom('${k.id}')" title="Delete">✕</button>
+            </div>`).join('')}
+        </div>` : ''}
+      <input type="file" accept="application/json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
+      <button class="ghost" style="margin-top:14px;" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>`;
   }
 
   else if(creationStep===1){
@@ -413,15 +534,11 @@ function pickGovernmentFreeBoost(a){ draft.governmentFreeBoost=a; renderCreation
 function pickBonusBoost1(a){ draft.bonusBoost1=a; renderCreationScreen(); }
 function pickBonusBoost2(a){ draft.bonusBoost2=a; renderCreationScreen(); }
 
-function finishCreation(btn){
+async function finishCreation(btn){
   // prove the click was received, before anything else runs, regardless of what happens next
   if(btn){ btn.textContent = 'Founding…'; btn.style.opacity = '0.7'; }
   try{
-    if(state.started && !confirm(`This replaces "${state.name}" — your currently saved kingdom. Export a backup first from Overview if you want to keep it. Continue?`)){
-      if(btn){ btn.textContent = 'Found Your Kingdom'; btn.style.opacity = '1'; }
-      return;
-    }
-    if(!draft){ alert('Something reset your progress — please go through the steps again.'); forceShowCreation=false; creationStep=0; renderCreationScreen(); return; }
+    if(!draft){ alert('Something reset your progress — please go through the steps again.'); creationStep=0; renderCreationScreen(); return; }
     state = DEFAULT_STATE();
     state.started = true;
     state.name = (draft.name||'').trim() || 'Unnamed Realm';
@@ -436,9 +553,9 @@ function finishCreation(btn){
     if(GOVERNMENTS[draft.government]){
       GOVERNMENTS[draft.government].skills.forEach(sk=>{ state.skills[sk].rank='T'; });
     }
-    forceShowCreation = false;
-    scheduleSave();
-    boot();
+    currentKingdomId = newId();
+    await saveCurrentKingdom();
+    enterMainApp();
     startPickCapital();
   } catch(e){
     console.error('finishCreation failed:', e);
@@ -470,10 +587,11 @@ function render(){
 
 /* ---------- OVERVIEW (dashboard) ---------- */
 function renderOverview(){
+  state.size = Math.max(1, claimedHexCount());
   const sz = sizeRow(state.size);
   const baseDC = CONTROL_DC_BY_LEVEL[Math.min(20,Math.max(1,state.level))] || 14;
   const totalDC = baseDC + sz.mod;
-  const diceCount = state.level + 4;
+  const diceCount = state.level + 4 + featResourceDieBonus();
 
   const govHtml = state.creation.government
     ? `<div class="hint" style="margin-top:0;">${state.creation.government} · ${state.creation.charter||'—'} charter · ${state.creation.heartland||'—'}</div>`
@@ -497,7 +615,7 @@ function renderOverview(){
       <div class="seal"><div class="val mono">${state.level}</div><div class="lbl">Level</div><div class="sub">${state.xp} XP</div></div>
       <div class="seal"><div class="val mono">${totalDC}</div><div class="lbl">Control DC</div><div class="sub">${sz.type}</div></div>
       <div class="seal"><div class="val mono">${state.size}</div><div class="lbl">Size</div><div class="sub">hexes</div></div>
-      <div class="seal"><div class="val mono">${sz.die}×${diceCount}</div><div class="lbl">Resources</div><div class="sub">RP / turn</div></div>
+      <div class="seal"><div class="val mono">${sz.die}×${diceCount}</div><div class="lbl">Resources</div><div class="sub">${featResourceDieBonus()?`RP / turn (+${featResourceDieBonus()} feat)`:'RP / turn'}</div></div>
       <div class="seal"><div class="val mono">${state.unrest}</div><div class="lbl">Unrest</div><div class="sub">${unrestPenalty(state.unrest)<0?fmt(unrestPenalty(state.unrest))+' checks':'no penalty'}</div></div>
       <div class="seal"><div class="val mono">${state.fame}</div><div class="lbl">${state.fameType}</div><div class="sub">of ${state.fameMax}</div></div>
     </div>
@@ -589,7 +707,7 @@ function renderOverview(){
         </div>
         <div>
           <div class="hint" style="margin-top:0;">Size (hexes)</div>
-          <input class="num" type="number" min="1" value="${state.size}" onchange="state.size=Math.max(1,parseInt(this.value)||1);scheduleSave();render();">
+          <div class="mono" style="font-size:16px;padding:7px 0;">${state.size} <span style="color:var(--text-muted);font-size:11px;">— claimed on the map</span></div>
         </div>
       </div>
     </div>
@@ -597,11 +715,17 @@ function renderOverview(){
     ${state.kingdomFeats.length ? `
     <div class="card">
       <h3>Kingdom Feats</h3>
-      ${state.kingdomFeats.map((f,i)=>`
-        <div class="row">
-          <div class="label">${escapeHtml(f.name)}<small>gained at level ${f.level}</small></div>
-          <button class="loc-link" style="color:var(--rust);" onclick="state.kingdomFeats.splice(${i},1);scheduleSave();render();">remove</button>
-        </div>`).join('')}
+      ${state.kingdomFeats.map((f,i)=>{
+        const def = KINGDOM_FEATS[f.name];
+        return `
+        <div class="row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <div class="label" style="font-weight:600;">${escapeHtml(f.name)}<small>gained at level ${f.level}</small></div>
+            <button class="loc-link" style="color:var(--rust);" onclick="state.kingdomFeats.splice(${i},1);scheduleSave();render();">remove</button>
+          </div>
+          ${def ? `<div class="hint" style="margin-top:2px;">${escapeHtml(def.effect)}</div>` : ''}
+        </div>`;
+      }).join('')}
     </div>` : ''}
 
     <div class="card">
@@ -661,10 +785,11 @@ function renderAbilities(){
         ${abSkills.map(([name])=>{
           const s = state.skills[name];
           const profBonus = RANK_BONUS(s.rank, state.level);
-          const total = mod(score) + profBonus + (s.status||0) - ruin.penalty - Math.abs(Math.min(0,unrestPenalty(state.unrest)));
+          const featBonus = featSkillBonus(name);
+          const total = mod(score) + profBonus + featBonus + (s.status||0) - ruin.penalty - Math.abs(Math.min(0,unrestPenalty(state.unrest)));
           const trainedBy = skillTrainedSource(name);
           return `<div class="row">
-            <div class="label">${name}${trainedBy?`<span class="skill-source-icon" title="Trained via ${escapeAttr(trainedBy)}">‡</span>`:''}<small>${RANK_LABEL[s.rank]}</small></div>
+            <div class="label">${name}${trainedBy?`<span class="skill-source-icon" title="Trained via ${escapeAttr(trainedBy)}">‡</span>`:''}${featBonus?`<span class="skill-source-icon" title="Feat bonus">✦</span>`:''}<small>${RANK_LABEL[s.rank]}</small></div>
             <div style="display:flex;gap:6px;align-items:center;">
               <select class="rank" onchange="state.skills['${name}'].rank=this.value;scheduleSave();render();">
                 ${Object.keys(RANK_LABEL).map(k=>`<option value="${k}" ${s.rank===k?'selected':''}>${RANK_LABEL[k]}</option>`).join('')}
@@ -777,10 +902,27 @@ function showLevelUpPopup(kind, lvl){
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
   let inner = '';
   if(kind==='feat'){
+    const eligible = Object.keys(KINGDOM_FEATS).filter(name=>{
+      const f = KINGDOM_FEATS[name];
+      if(f.level > lvl) return false;
+      if(featAlreadyTaken(name) && !f.repeatable) return false;
+      return featPrereqMet(name);
+    });
     inner = `
       <h3>Level ${lvl}: Kingdom Feat</h3>
-      <div class="hint" style="margin-top:0;">Your kingdom gains a Kingdom Feat this level. Pick any feat at or below level ${lvl} that it qualifies for from your rulebook, and log it here.</div>
-      <input class="wide" type="text" id="levelup-feat-name" placeholder="Feat name" style="margin-top:10px;">
+      <div class="hint" style="margin-top:0;">Your kingdom gains a Kingdom Feat this level. Feats you qualify for so far:</div>
+      <a href="https://2e.aonprd.com/Rules.aspx?ID=1780" target="_blank" rel="noopener" class="loc-link" style="display:inline-block;margin:4px 0 8px;">↗ Full feat list &amp; rules on Archives of Nethys</a>
+      <div style="max-height:38vh;overflow-y:auto;">
+        ${eligible.length ? eligible.map(name=>{
+          const f = KINGDOM_FEATS[name];
+          return `<button type="button" class="option-card" onclick="selectKingdomFeat('${name}',${lvl})">
+            <div class="opt-name">${name} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(level ${f.level})</span></div>
+            <div class="opt-detail">${escapeHtml(f.effect)}</div>
+          </button>`;
+        }).join('') : `<div class="hint" style="margin-top:0;">Nothing from our built-in list fits yet (level ${lvl}, current training/abilities) — this list only covers levels 1\u201311. Check the link above for the rest.</div>`}
+      </div>
+      <div class="hint" style="margin:10px 0 4px;">Or log a different one by name:</div>
+      <input class="wide" type="text" id="levelup-feat-name" placeholder="Feat name">
       <button class="action" onclick="confirmFeatChoice(${lvl})">Confirm</button>
       <button class="ghost" style="margin-top:8px;" onclick="closeLevelUpPopup()">Skip for now</button>`;
   } else {
@@ -814,10 +956,40 @@ function closeLevelUpPopup(){
   if(el) el.remove();
   render();
 }
+function selectKingdomFeat(name, lvl){
+  if(KINGDOM_FEATS[name] && KINGDOM_FEATS[name].trainsSkill){
+    showSkillTrainingSubPicker(name, lvl);
+    return;
+  }
+  applyAndLogFeat(name, lvl);
+  closeLevelUpPopup();
+}
+function showSkillTrainingSubPicker(name, lvl){
+  const overlay = document.getElementById('levelup-overlay');
+  const untrained = SKILLS.filter(([n])=>state.skills[n].rank==='U');
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>${name}</h3>
+    <div class="hint" style="margin-top:0;">Which skill?</div>
+    <div style="margin-top:8px;max-height:48vh;overflow-y:auto;">
+      ${untrained.length ? untrained.map(([n,ab])=>`
+        <button type="button" class="option-card" onclick="applyAndLogFeat('${name}',${lvl},'${n}');closeLevelUpPopup();">
+          <div class="opt-name">${n} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${ab})</span></div>
+        </button>`).join('') : `<div class="hint" style="margin-top:0;">Every skill is already trained.</div>`}
+    </div>
+    <button class="ghost" style="margin-top:8px;" onclick="closeLevelUpPopup()">Skip for now</button>
+  </div>`;
+}
+function applyAndLogFeat(name, lvl, trainedSkill){
+  const f = KINGDOM_FEATS[name];
+  if(f && f.trainsSkill && trainedSkill){
+    state.skills[trainedSkill].rank = 'T';
+  }
+  state.kingdomFeats.push({level:lvl, name});
+  scheduleSave();
+}
 function confirmFeatChoice(lvl){
   const name = document.getElementById('levelup-feat-name').value.trim();
-  if(name) state.kingdomFeats.push({level:lvl, name});
-  scheduleSave();
+  if(name) applyAndLogFeat(name, lvl);
   closeLevelUpPopup();
 }
 function confirmSkillIncrease(name, newRank){
@@ -925,7 +1097,7 @@ function confirmPick(){
 function pinCapitalLocation(col,row){
   const key = hexKey(col,row);
   const existing = state.hexes[key] || {note:''};
-  state.hexes[key] = {name: state.name, type:'Capital', note: existing.note||''};
+  state.hexes[key] = {name: state.name, type:'Capital', note: existing.note||'', resources: existing.resources||'', features: existing.features||''};
   cancelPickLocation();
   scheduleSave();
   updateHexMarkers();
@@ -952,8 +1124,8 @@ function pinSettlementLocation(col,row){
   }
   s.col = col; s.row = row;
   const key = hexKey(col,row);
-  const existing = state.hexes[key] || {name:'',type:'',note:''};
-  state.hexes[key] = {name: s.name, type:'Settlement', note: existing.note||''};
+  const existing = state.hexes[key] || {name:'',type:'',note:'',resources:'',features:''};
+  state.hexes[key] = {name: s.name, type:'Settlement', note: existing.note||'', resources: existing.resources||'', features: existing.features||''};
   scheduleSave();
   updateHexMarkers();
   renderNotesTab();
@@ -1286,10 +1458,12 @@ function openHexPanel(col,row){
     const poly = svg.querySelector(`[data-key="${activeHexKey}"]`);
     if(poly) poly.classList.add('selected');
   }
-  const h = state.hexes[activeHexKey] || {name:'',type:'',note:''};
+  const h = state.hexes[activeHexKey] || {name:'',type:'',note:'',resources:'',features:''};
   document.getElementById('hex-panel-title').textContent = 'Hex '+hexLabel(col,row);
   document.getElementById('hex-name').value = h.name||'';
   document.getElementById('hex-type').value = h.type||'';
+  document.getElementById('hex-resources').value = h.resources||'';
+  document.getElementById('hex-features').value = h.features||'';
   document.getElementById('hex-note').value = h.note||'';
   document.getElementById('hex-panel').classList.add('open');
 }
@@ -1303,15 +1477,18 @@ function saveHex(){
   if(!activeHexKey) return;
   const name = document.getElementById('hex-name').value.trim();
   const type = document.getElementById('hex-type').value;
+  const resources = document.getElementById('hex-resources').value.trim();
+  const features = document.getElementById('hex-features').value.trim();
   const note = document.getElementById('hex-note').value.trim();
-  if(!name && !type && !note){
+  if(!name && !type && !note && !resources && !features){
     delete state.hexes[activeHexKey];
   } else {
-    state.hexes[activeHexKey] = {name,type,note};
+    state.hexes[activeHexKey] = {name,type,note,resources,features};
   }
   scheduleSave();
   updateHexMarkers();
   renderNotesTab();
+  render();
   closeHexPanel();
 }
 function renderMapExtras(){
@@ -1329,7 +1506,7 @@ function renderNotesTab(){
   const typeOrder = Object.keys(HEX_TYPE_SYMBOLS);
   const entries = Object.keys(state.hexes)
     .map(key=>{ const [col,row] = key.split('_').map(Number); return {key, col, row, ...state.hexes[key]}; })
-    .filter(e=>e.name || e.type || e.note)
+    .filter(e=>e.name || e.type || e.note || e.resources || e.features)
     .sort((a,b)=>{
       const ta = typeOrder.indexOf(a.type), tb = typeOrder.indexOf(b.type);
       if(ta !== tb) return (ta===-1?999:ta) - (tb===-1?999:tb);
@@ -1341,6 +1518,7 @@ function renderNotesTab(){
   }
   list.innerHTML = entries.map(e=>{
     const symbol = e.type && HEX_TYPE_SYMBOLS[e.type] ? HEX_TYPE_SYMBOLS[e.type] : '·';
+    const tags = [e.resources ? 'Resources: '+e.resources : '', e.features ? 'Features: '+e.features : ''].filter(Boolean).join(' · ');
     return `<button class="note-item" onclick="jumpToHex(${e.col},${e.row})">
       <span class="note-dot">${symbol}</span>
       <span class="note-body">
@@ -1349,6 +1527,7 @@ function renderNotesTab(){
           <span class="note-hexlabel">${hexLabel(e.col,e.row)}</span>
         </span>
         ${e.type ? `<div class="note-type">${escapeHtml(e.type)}</div>` : ''}
+        ${tags ? `<div class="note-type">${escapeHtml(tags)}</div>` : ''}
         ${e.note ? `<div class="note-text">${escapeHtml(e.note)}</div>` : ''}
       </span>
     </button>`;
