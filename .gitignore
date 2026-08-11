@@ -1,0 +1,21 @@
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/.cxx/
+android/app/release/
+
+# web/ is copied here automatically at build time (see app/build.gradle) —
+# don't hand-edit or commit this copy, edit web/ instead
+android/app/src/main/assets/
+
+# Gradle wrapper jar isn't committed — see README for how to generate it locally
+android/gradle/wrapper/gradle-wrapper.jar
+
+# OS cruft
+.DS_Store
+Thumbs.db
