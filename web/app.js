@@ -13,6 +13,24 @@ const ROLES = [
   ['Ruler','Loyalty'],['Counselor','Culture'],['General','Stability'],['Emissary','Loyalty'],
   ['Magister','Culture'],['Treasurer','Economy'],['Viceroy','Economy'],['Warden','Stability']
 ];
+// Kingdom activities carrying the Leadership trait (2e.aonprd.com/Traits.aspx?ID=439) —
+// confirmed individually against each activity's own Actions.aspx page, not assumed from
+// the name. Several activities that sound Leadership-flavored actually aren't (New
+// Leadership is Downtime+Upkeep; Improve Lifestyle and Tap Treasury are Commerce+Downtime)
+// and are deliberately left out. `skills` lists every option the activity allows.
+const LEADERSHIP_ACTIVITIES = {
+  'Celebrate Holiday':        {skills:['Folklore'], note:'Untrained. DC +4 if also celebrated last turn.'},
+  'Creative Solution':        {skills:['Scholarship'], note:'Untrained. Success costs 1d4 RP researching it; failure costs 2d6 RP.'},
+  'Establish Trade Agreement':{skills:['Trade'], note:'Trade by default — Boating if a navigable river connects, or Magic if the kingdom is Master+ in Magic. Needs existing diplomatic relations.'},
+  "Pledge of Fealty":         {skills:['Intrigue','Statecraft','Warfare'], note:'Some groups respond better to a particular skill.'},
+  'Provide Care':             {skills:['Defense'], note:'Untrained.'},
+  'Quell Unrest':             {skills:['Arts','Folklore','Intrigue','Magic','Politics','Warfare'], note:"Can't use the same skill two turns in a row."},
+  'Repair Reputation':        {skills:['Arts','Trade','Engineering','Intrigue'], note:'Arts→Corruption, Trade→Crime, Engineering→Decay, Intrigue→Strife. DC is Control DC + 2.'},
+  'Request Foreign Aid':      {skills:['Statecraft'], note:'Trained. Needs existing diplomatic relations with the group asked.'},
+  'Rest and Relax':           {skills:['Arts','Boating','Scholarship','Trade','Wilderness'], note:'DC +4 if also used last turn.'},
+  'Send Diplomatic Envoy':    {skills:['Statecraft'], note:'Trained.'},
+  'Supernatural Solution':    {skills:['Magic'], note:'Untrained. Success costs 1d4 RP researching it; failure costs 2d6 RP.'}
+};
 const GOODS = ['Food','Lumber','Ore','Stone','Luxuries'];
 const GOODS_ICON = {Food:'●', Lumber:'▲', Ore:'■', Stone:'◆', Luxuries:'✦'};
 const GOVERNMENTS = {
@@ -301,8 +319,20 @@ const KM_STRUCTURES = [
 // you build). "Settlement-level requirement" is approximated with kingdom level (state.level)
 // since the app doesn't track a separate numeric settlement level, only the four type tiers —
 // combined with the lot-space filter this stays reasonably in line with a settlement's actual size.
+// Same pattern as Kingdom Feats' featPrereqMet: does the kingdom actually have the
+// required proficiency rank in one of the listed skills (construction.skill is
+// sometimes slash-separated, e.g. "Defense/Industry/Magic/Statecraft" — any one qualifies)?
+// construction.rank===null means no rank requirement, just the DC.
+function structureRankMet(st){
+  if(!st.construction || !st.construction.rank) return true;
+  const required = {trained:1, expert:2, master:3}[st.construction.rank] || 0;
+  return st.construction.skill.split('/').some(name=>{
+    const s = state.skills[name];
+    return s && RANK_ORDER[s.rank]>=required;
+  });
+}
 function buildableStructuresFor(emptyLotsInBlock){
-  return KM_STRUCTURES.filter(st=> st.construction && st.lots!=null && st.lots<=emptyLotsInBlock && st.level<=state.level);
+  return KM_STRUCTURES.filter(st=> st.construction && st.lots!=null && st.lots<=emptyLotsInBlock && st.level<=state.level && structureRankMet(st));
 }
 function structureCategoryClass(def){
   const cats = (def && def.category) || [];
@@ -356,6 +386,7 @@ const HEX_ROWS = Math.ceil((VB_H-ORIGIN_Y)/HEX_VSPACE)+2;
 let activeHexKey = null;
 const RANK_LABEL = {U:'Untrained', T:'Trained', E:'Expert', M:'Master', L:'Legendary'};
 const RANK_BONUS = (rank, level) => rank==='U' ? 0 : level + ({T:2,E:4,M:6,L:8}[rank]);
+const RANK_ORDER = {U:0, T:1, E:2, M:3, L:4};
 
 function sizeRow(size){
   if(size<10) return {die:'1d4', mod:0, storage:4, type:'Territory'};
@@ -507,7 +538,7 @@ let state = null;
 const DEFAULT_STATE = () => ({
   started:false,
   name:'Unnamed Realm', playerCharacter:'', level:1, xp:0, size:1, unrest:0, consumption:0, turn:1,
-  fameType:'Fame', fame:0, fameMax:3, rp:0, turnUpkeep:null,
+  fameType:'Fame', fame:0, fameMax:3, rp:0, turnUpkeep:null, leadershipTurn:0, leadershipUsed:{},
   creation:{charter:'', charterFreeBoost:'', heartland:'', government:'', governmentFreeBoost:'', bonusBoost1:'', bonusBoost2:''},
   levelBoosts:[],
   kingdomFeats:[],
@@ -1254,6 +1285,7 @@ function renderLeaders(){
       </div>
     </div>`;
   }).join('');
+  renderLeadershipActivitiesCard();
 }
 function handleLeaderSelect(role, val){
   if(val==='__custom__'){
@@ -1270,6 +1302,86 @@ function toggleInvest(role, checked){
   if(checked && investedCount>=4){ render(); return; }
   state.leaders[role].invested = checked;
   scheduleSave(); render();
+}
+
+/* ---------- LEADERSHIP ACTIVITIES — reference + logging, not dice-rolling: the app
+   shows what's available and its skill, picking one from the list confirms it happened
+   at the table, exactly like the Upkeep wizard's steps. ---------- */
+function capitalSettlement(){
+  const capitalEntry = Object.entries(state.hexes).find(([,h])=>h && h.type==='Capital');
+  if(!capitalEntry) return null;
+  const [col,row] = capitalEntry[0].split('_').map(Number);
+  return state.settlements.find(s=>s.col===col && s.row===row) || null;
+}
+function capitalHasLeadershipBonusStructure(){
+  const cap = capitalSettlement();
+  if(!cap) return false;
+  let found = false;
+  forEachPlacedStructure((def,slot,s)=>{ if(s===cap && ['Castle','Palace','Town Hall'].includes(def.name)) found = true; });
+  return found;
+}
+function ensureLeadershipTurnFresh(){
+  if(state.leadershipTurn !== state.turn){ state.leadershipTurn = state.turn; state.leadershipUsed = {}; }
+}
+function leadershipActivityCap(){ return capitalHasLeadershipBonusStructure() ? 3 : 2; }
+function leadershipActivitiesRemaining(role){
+  ensureLeadershipTurnFresh();
+  return Math.max(0, leadershipActivityCap() - (state.leadershipUsed[role]||0));
+}
+function openLeadershipActivityPicker(role){
+  const l = state.leaders[role];
+  const remaining = leadershipActivitiesRemaining(role);
+  const overlay = document.createElement('div');
+  overlay.id = 'leadership-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>${role} — ${escapeHtml(l.name)}</h3>
+    <div class="hint" style="margin-top:0;">${remaining} of ${leadershipActivityCap()} Leadership activities left this turn. Resolve the check at the table, then log which one:</div>
+    <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
+      ${Object.entries(LEADERSHIP_ACTIVITIES).map(([name,def])=>`
+        <button type="button" class="option-card" onclick="logLeadershipActivity('${role}','${escapeAttr(name)}')">
+          <div class="opt-name">${escapeHtml(name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${def.skills.join(' / ')})</span></div>
+          <div class="opt-detail">${escapeHtml(def.note)}</div>
+        </button>`).join('')}
+    </div>
+    <button class="ghost" style="margin-top:8px;" onclick="closeLeadershipOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function closeLeadershipOverlay(){
+  const el = document.getElementById('leadership-overlay');
+  if(el) el.remove();
+}
+function logLeadershipActivity(role, activityName){
+  if(leadershipActivitiesRemaining(role)<=0) return;
+  state.leadershipUsed[role] = (state.leadershipUsed[role]||0)+1;
+  const l = state.leaders[role];
+  const def = LEADERSHIP_ACTIVITIES[activityName];
+  state.log.unshift({turn:state.turn, note:`Leadership — ${role} (${l.name||'vacant'}) used ${activityName} (${def.skills.join('/')}).`});
+  closeLeadershipOverlay();
+  scheduleSave();
+  render();
+}
+function renderLeadershipActivitiesCard(){
+  ensureLeadershipTurnFresh();
+  const capBonus = capitalHasLeadershipBonusStructure();
+  const cap = capBonus ? 3 : 2;
+  const active = ROLES.filter(([r])=>state.leaders[r].name && !state.leaders[r].vacant);
+  document.getElementById('leadership-activities-card').innerHTML = `<div class="card">
+    <div class="card-head-row"><h3 style="margin-bottom:0;">Leadership Activities</h3><span class="pill">${cap}/turn each${capBonus?' · Castle/Palace/Town Hall':''}</span></div>
+    <div class="hint" style="margin-top:0;">Reference only — pick what a leader did this turn after resolving the check at the table. Logged to the turn log below on Overview.</div>
+    ${active.length ? active.map(([role])=>{
+      const l = state.leaders[role];
+      const remaining = leadershipActivitiesRemaining(role);
+      return `<div class="row">
+        <div class="label">${role}<small>${escapeHtml(l.name)}</small></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="mono" style="font-size:12px;color:var(--text-muted);">${remaining}/${cap} left</span>
+          <button class="small-ghost" ${remaining<=0?'style="opacity:.4;pointer-events:none;"':''} onclick="openLeadershipActivityPicker('${role}')">Log Activity</button>
+        </div>
+      </div>`;
+    }).join('') : `<div class="hint" style="margin-top:0;">No leaders assigned yet — fill a role above first.</div>`}
+  </div>`;
 }
 
 /* ---------- GOODS ---------- */
@@ -1768,30 +1880,50 @@ function renameSettlement(id, val){
 
 /* ---------- lot placement / upgrade / removal ---------- */
 function lotsForGrid(s, gridNum){ return gridNum===2 ? s.grid.lots2 : s.grid.lots; }
+const STRUCTURE_PICKER_CATEGORIES = ['All','Building','Residential','Edifice','Yard'];
+let lotPickerState = null; // {sid,gridNum,blockIdx,category,search} while the picker overlay is open
 function openLotPicker(sid, gridNum, blockIdx){
   const s = state.settlements.find(x=>x.id===sid);
   if(!s) return;
-  const block = lotsForGrid(s, gridNum)[blockIdx];
-  const emptyCount = block.filter(v=>!v).length;
-  const options = buildableStructuresFor(emptyCount);
+  lotPickerState = {sid, gridNum, blockIdx, category:'All', search:''};
   const overlay = document.createElement('div');
   overlay.id = 'lot-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
     <h3>Build in ${escapeHtml(s.name)}</h3>
-    <div class="hint" style="margin-top:0;">This block has ${emptyCount} open lot${emptyCount===1?'':'s'}. RP balance: ${state.rp}. Structures that fit:</div>
-    <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
-      ${options.length ? options.map(st=>{
-        const problem = affordabilityMessage(st.cost);
-        return `<button type="button" class="option-card" ${problem?'style="opacity:.45;pointer-events:none;"':''} onclick="placeStructureInLot(${sid},${gridNum},${blockIdx},'${escapeAttr(st.name)}')">
-          <div class="opt-name">${escapeHtml(st.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${st.lots} lot${st.lots>1?'s':''} · ${formatCost(st.cost)})</span></div>
-          <div class="opt-detail">${escapeHtml(st.effect)}${problem?` — <span style="color:var(--rust);">${escapeHtml(problem)}</span>`:''}</div>
-        </button>`;
-      }).join('') : `<div class="hint" style="margin-top:0;">Nothing fits here yet — needs more open lots in this block, or a higher kingdom level.</div>`}
-    </div>
+    <div class="hint" style="margin-top:0;" id="lot-picker-hint"></div>
+    <input type="text" class="wide" placeholder="Search structures…" style="margin-top:8px;" oninput="lotPickerState.search=this.value;renderLotPickerResults();">
+    <div id="lot-picker-categories" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;"></div>
+    <div id="lot-picker-results" style="margin-top:8px;max-height:48vh;overflow-y:auto;"></div>
     <button class="ghost" style="margin-top:8px;" onclick="closeLotOverlay()">Cancel</button>
   </div>`;
   document.body.appendChild(overlay);
+  renderLotPickerCategories();
+  renderLotPickerResults();
+}
+function renderLotPickerCategories(){
+  document.getElementById('lot-picker-categories').innerHTML = STRUCTURE_PICKER_CATEGORIES.map(c=>
+    `<button type="button" class="small-ghost" style="${lotPickerState.category===c?'border-color:var(--gold);color:var(--gold);':''}" onclick="lotPickerState.category='${c}';renderLotPickerCategories();renderLotPickerResults();">${c}</button>`
+  ).join('');
+}
+function renderLotPickerResults(){
+  const {sid, gridNum, blockIdx, category, search} = lotPickerState;
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  const block = lotsForGrid(s, gridNum)[blockIdx];
+  const emptyCount = block.filter(v=>!v).length;
+  let options = buildableStructuresFor(emptyCount);
+  if(category!=='All') options = options.filter(st=>(st.category||[]).includes(category));
+  const q = search.trim().toLowerCase();
+  if(q) options = options.filter(st=>st.name.toLowerCase().includes(q));
+  document.getElementById('lot-picker-hint').textContent = `This block has ${emptyCount} open lot${emptyCount===1?'':'s'}. RP balance: ${state.rp}.`;
+  document.getElementById('lot-picker-results').innerHTML = options.length ? options.map(st=>{
+    const problem = affordabilityMessage(st.cost);
+    return `<button type="button" class="option-card" ${problem?'style="opacity:.45;pointer-events:none;"':''} onclick="placeStructureInLot(${sid},${gridNum},${blockIdx},'${escapeAttr(st.name)}')">
+      <div class="opt-name">${escapeHtml(st.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${st.lots} lot${st.lots>1?'s':''} · ${formatCost(st.cost)})</span></div>
+      <div class="opt-detail">${escapeHtml(st.effect)}${problem?` — <span style="color:var(--rust);">${escapeHtml(problem)}</span>`:''}</div>
+    </button>`;
+  }).join('') : `<div class="hint" style="margin-top:0;">Nothing matches — try a different filter, or check lot space, kingdom level, and proficiency.</div>`;
 }
 // Unlike skill-check DCs (resolved at the table), RP/commodity cost is pure arithmetic,
 // so it's enforced here rather than just displayed.
@@ -1876,7 +2008,7 @@ function openLotInfoPopup(sid, gridNum, blockIdx, groupId){
   const currentLots = block.filter(v=>v && v.g===groupId).length;
   const emptyCount = block.filter(v=>!v).length;
   const upgradeOptions = ((def && def.upgradeTo) || [])
-    .map(n=>KM_STRUCTURES.find(x=>x.name===n)).filter(u=>u && u.level<=state.level);
+    .map(n=>KM_STRUCTURES.find(x=>x.name===n)).filter(u=>u && u.level<=state.level && structureRankMet(u));
   const overlay = document.createElement('div');
   overlay.id = 'lot-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
