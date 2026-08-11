@@ -46,43 +46,36 @@ const HEARTLAND_BOOSTS = {
 // it if this ever moves to a different repository.
 const APP_VERSION = 'v1.2.0';
 const GITHUB_REPO = 'NariderThorn/KingMaker-Beta-Managment';
-async function checkForUpdate(){
-  const btn = document.getElementById('update-check-btn');
-  const resultEl = document.getElementById('update-check-result');
-  if(btn){ btn.textContent = 'Checking…'; btn.disabled = true; }
+let updateInfo = null;      // {tag, htmlUrl, apkUrl} once checked, or 'current', or 'error'
+let updateCheckStarted = false;
+async function checkForUpdateOnBoot(){
+  if(updateCheckStarted) return;
+  updateCheckStarted = true;
   try{
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
     if(!res.ok) throw new Error('request failed');
     const data = await res.json();
     if(!data.tag_name) throw new Error('no release found');
-    if(data.tag_name === APP_VERSION){
-      resultEl.textContent = `You're on the latest version (${APP_VERSION}).`;
+    if(data.tag_name === APP_VERSION && !isHotUpdated()){
+      updateInfo = 'current';
     } else {
-      resultEl.innerHTML = `A newer version is available: <b>${escapeHtml(data.tag_name)}</b>. <a href="${escapeAttr(data.html_url)}" target="_blank" rel="noopener">Open the release to download it</a> — installing it over this app keeps all your kingdoms.`;
+      const apkAsset = (data.assets||[]).find(a=>a.name && a.name.toLowerCase().endsWith('.apk'));
+      updateInfo = {tag: data.tag_name, htmlUrl: data.html_url, apkUrl: apkAsset ? apkAsset.browser_download_url : null};
     }
   }catch(e){
-    resultEl.textContent = "Couldn't check for updates — check your connection and try again.";
+    updateInfo = 'error';
   }
-  if(btn){ btn.textContent = 'Check for update'; btn.disabled = false; }
+  if(creationStep===0) renderCreationScreen();
 }
 function isHotUpdated(){
   try{ return !!localStorage.getItem('hotupdate-app-js'); }catch(e){ return false; }
 }
 async function applyHotUpdate(){
   const btn = document.getElementById('hot-update-btn');
-  const resultEl = document.getElementById('update-check-result');
+  const resultEl = document.getElementById('update-menu-result');
   if(btn){ btn.textContent = 'Updating…'; btn.disabled = true; }
   try{
-    const relRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
-    if(!relRes.ok) throw new Error('could not reach GitHub');
-    const rel = await relRes.json();
-    const tag = rel.tag_name;
-    if(!tag) throw new Error('no release found');
-    if(tag === APP_VERSION && !isHotUpdated()){
-      resultEl.textContent = `Already on the latest version (${APP_VERSION}).`;
-      if(btn){ btn.textContent = '↻ Update now (no reinstall)'; btn.disabled = false; }
-      return;
-    }
+    const tag = (updateInfo && updateInfo.tag) || APP_VERSION;
     const [jsRes, cssRes] = await Promise.all([
       fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/web/app.js`),
       fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/web/style.css`)
@@ -96,11 +89,11 @@ async function applyHotUpdate(){
     }
     localStorage.setItem('hotupdate-app-js', jsText);
     localStorage.setItem('hotupdate-style-css', cssText);
-    resultEl.textContent = `Updated to ${tag} — reloading…`;
+    if(resultEl) resultEl.textContent = `Updated to ${tag} — reloading…`;
     setTimeout(()=>location.reload(), 700);
   }catch(e){
-    resultEl.textContent = "Update failed: " + e.message + ". Nothing was changed.";
-    if(btn){ btn.textContent = '↻ Update now (no reinstall)'; btn.disabled = false; }
+    if(resultEl) resultEl.textContent = "Update failed: " + e.message + ". Nothing was changed.";
+    if(btn){ btn.textContent = 'Quick update (no reinstall)'; btn.disabled = false; }
   }
 }
 function resetToBundledVersion(){
@@ -113,24 +106,48 @@ function resetToBundledVersion(){
 }
 async function downloadAndInstallLatestApk(){
   const btn = document.getElementById('full-update-btn');
-  const resultEl = document.getElementById('update-check-result');
+  const resultEl = document.getElementById('update-menu-result');
   if(!window.AndroidUpdater){
-    resultEl.textContent = "This only works inside the installed app, not a browser.";
+    if(resultEl) resultEl.textContent = "This only works inside the installed app, not a browser.";
     return;
   }
-  if(btn){ btn.textContent = 'Fetching release info…'; btn.disabled = true; }
-  try{
-    const relRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
-    if(!relRes.ok) throw new Error('could not reach GitHub');
-    const rel = await relRes.json();
-    const apkAsset = (rel.assets||[]).find(a=>a.name && a.name.toLowerCase().endsWith('.apk'));
-    if(!apkAsset) throw new Error('the latest release has no APK attached');
-    resultEl.textContent = `Downloading ${rel.tag_name}… you'll get an Android notification, then a confirm screen to finish installing.`;
-    window.AndroidUpdater.downloadAndInstall(apkAsset.browser_download_url);
-  }catch(e){
-    resultEl.textContent = "Couldn't start the update: " + e.message;
+  const apkUrl = updateInfo && updateInfo.apkUrl;
+  if(!apkUrl){
+    if(resultEl) resultEl.textContent = "The latest release has no APK attached.";
+    return;
   }
-  if(btn){ btn.textContent = '⬇ Download & install full update'; btn.disabled = false; }
+  if(btn){ btn.textContent = 'Starting…'; btn.disabled = true; }
+  if(resultEl) resultEl.textContent = `Downloading ${updateInfo.tag}… you'll get an Android notification, then a confirm screen to finish installing.`;
+  window.AndroidUpdater.downloadAndInstall(apkUrl);
+  if(btn){ btn.textContent = 'Full update (new install)'; btn.disabled = false; }
+}
+function retryUpdateCheck(){
+  updateCheckStarted = false;
+  updateInfo = null;
+  checkForUpdateOnBoot();
+  renderCreationScreen();
+}
+function renderUpdateMenu(){
+  let statusText = '';
+  let actionsHtml = '';
+  if(updateInfo === null){
+    statusText = 'Checking for updates…';
+  } else if(updateInfo === 'current'){
+    statusText = "You're up to date.";
+  } else if(updateInfo === 'error'){
+    statusText = "Couldn't check for updates — check your connection.";
+    actionsHtml = `<button class="ghost" style="margin-top:8px;" onclick="retryUpdateCheck()">Try again</button>`;
+  } else {
+    statusText = `Update available: ${updateInfo.tag}`;
+    actionsHtml = `
+      <button class="action" id="hot-update-btn" style="margin-top:8px;" onclick="applyHotUpdate()">Quick update (no reinstall)</button>
+      ${window.AndroidUpdater && updateInfo.apkUrl ? `<button class="ghost" id="full-update-btn" style="margin-top:8px;" onclick="downloadAndInstallLatestApk()">Full update (new install)</button>` : ''}`;
+  }
+  return `
+    <div class="hint" style="margin-top:0;">App Version ${APP_VERSION}${isHotUpdated()?' (hot-updated)':''}</div>
+    <div class="hint" id="update-menu-result" style="margin-top:4px;">${escapeHtml(statusText)}</div>
+    ${actionsHtml}
+    ${isHotUpdated() ? `<button class="ghost danger-ghost" style="margin-top:8px;" onclick="resetToBundledVersion()">Reset to version built into the app</button>` : ''}`;
 }
 const STORY_NPCS = [
   'Kesten Garess','Jhod Kavken','Jubilost Narezen','Tristian','Harrim','Valerie',
@@ -399,12 +416,13 @@ async function loadState(){
   currentKingdomId = null;
   state = null;
   showKingdomPicker();
+  checkForUpdateOnBoot();
 }
-function exportState(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+function downloadKingdomJson(s){
+  const blob = new Blob([JSON.stringify(s, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const safeName = (state.name||'kingdom').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+  const safeName = (s.name||'kingdom').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
   const date = new Date().toISOString().slice(0,10);
   a.href = url;
   a.download = `${safeName || 'kingdom'}-${date}.json`;
@@ -412,6 +430,14 @@ function exportState(){
   a.click();
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+async function exportKingdomById(id){
+  const raw = await storageGet(kingdomDataKey(id));
+  if(!raw){ alert("Could not find that kingdom's data."); return; }
+  let s;
+  try{ s = JSON.parse(raw); }
+  catch(e){ alert("That kingdom's save data looks corrupted."); return; }
+  downloadKingdomJson(s);
 }
 function importStateFile(fileInput){
   const file = fileInput.files[0];
@@ -520,11 +546,15 @@ function renderCreationScreen(){
                 <div class="opt-name">${escapeHtml(k.name)}</div>
                 <div class="opt-detail">${k.government?escapeHtml(k.government)+' · ':''}Level ${k.level}${k.updatedAt?' · '+new Date(k.updatedAt).toLocaleDateString():''}</div>
               </button>
+              <button type="button" class="kingdom-row-delete" style="color:var(--text-muted);" onclick="exportKingdomById('${k.id}')" title="Export">↓</button>
               <button type="button" class="kingdom-row-delete" onclick="confirmDeleteKingdom('${k.id}')" title="Delete">✕</button>
             </div>`).join('')}
         </div>` : ''}
       <input type="file" accept="application/json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
-      <button class="ghost" style="margin-top:14px;" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>`;
+      <button class="ghost" style="margin-top:14px;" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>
+
+      <div class="divider"></div>
+      ${renderUpdateMenu()}`;
   }
 
   else if(creationStep===1){
@@ -817,25 +847,7 @@ function renderOverview(){
           ${def ? `<div class="hint" style="margin-top:2px;">${escapeHtml(def.effect)}</div>` : ''}
         </div>`;
       }).join('')}
-    </div>` : ''}
-
-    <div class="card">
-      <h3>Backup</h3>
-      <div class="hint" style="margin-top:0;">Your kingdoms are saved on this device only. Export a file to back one up or move it to another device — import that file there to pick up right where you left off.</div>
-      <button class="ghost" onclick="exportState()">↓ Export to file</button>
-      <input type="file" accept="application/json" id="import-file-input" style="display:none;" onchange="importStateFile(this)">
-      <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('import-file-input').click()">↑ Import from file</button>
-      <button class="ghost" style="margin-top:8px;" onclick="openSwitchKingdom()">⬡ Create new / load other kingdom</button>
-    </div>
-
-    <div class="card">
-      <h3>App Version <span class="sub">${APP_VERSION}${isHotUpdated()?' (hot-updated)':''}</span></h3>
-      <div class="hint" style="margin-top:0;" id="update-check-result">Installing a newer version over this one keeps all your kingdoms — no need to uninstall first.</div>
-      <button class="ghost" id="update-check-btn" style="margin-top:8px;" onclick="checkForUpdate()">Check for update</button>
-      <button class="ghost" id="hot-update-btn" style="margin-top:8px;" onclick="applyHotUpdate()">↻ Update app.js/style.css now</button>
-      ${window.AndroidUpdater ? `<button class="ghost" id="full-update-btn" style="margin-top:8px;" onclick="downloadAndInstallLatestApk()">⬇ Download &amp; install full update</button>` : ''}
-      ${isHotUpdated() ? `<button class="ghost danger-ghost" style="margin-top:8px;" onclick="resetToBundledVersion()">Reset to version built into the app</button>` : ''}
-    </div>`;
+    </div>` : ''}`;
 }
 
 function switchTab(tab){
