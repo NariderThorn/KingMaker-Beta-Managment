@@ -233,7 +233,7 @@ const KM_STRUCTURES = [
   { name:"Dump", level:2, lots:1, cost:{rp:4}, construction:{skill:"Industry",rank:null,dc:16}, category:["Yard"], itemBonus:"+1 item bonus to Demolish", effect:"Softens the impact of certain events on settlements that have one. Cannot share a block with Residential structures." },
   { name:"Embassy", level:8, lots:2, cost:{rp:26,lumber:10,luxuries:6,stone:4}, construction:{skill:"Politics",rank:null,dc:24}, category:["Building"], itemBonus:"+1 item bonus to Send Diplomatic Envoy and Request Foreign Aid", effect:"Houses foreign diplomats and improves international relations." },
   { name:"Festival Hall", level:3, lots:1, cost:{rp:7,lumber:3}, construction:{skill:"Arts",rank:null,dc:18}, category:["Building"], upgradeTo:["Theater"], itemBonus:"+1 item bonus to Celebrate Holiday", effect:"A small venue for public gatherings and celebrations." },
-  { name:"Foundry", level:3, lots:2, cost:{rp:16,lumber:5,ore:2,stone:3}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Establish Work Site (mine)", effect:"Each foundry adds 1 to your kingdom's maximum Ore storage. Can't share a block with a Residential structure." },
+  { name:"Foundry", level:3, lots:2, cost:{rp:16,lumber:5,ore:2,stone:3}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Establish Work Site (mine)", effect:"Each foundry adds 1 to your kingdom's maximum Ore storage. Can't share a block with a Residential structure.", storageBonus:{good:"Ore", amt:1} },
   { name:"Garrison", level:5, lots:2, cost:{rp:28,lumber:6,stone:3}, construction:{skill:"Warfare",rank:"trained",dc:20}, category:["Building","Residential"], upgradeFrom:"Barracks", itemBonus:"+1 item bonus to Outfit Army or Train Army", effect:"Outfits and trains your armies. Reduces Unrest by 1 when built." },
   { name:"General Store", level:1, lots:1, cost:{rp:8,lumber:1}, construction:{skill:"Trade",rank:null,dc:15}, category:["Building"], upgradeTo:["Luxury Store","Marketplace"], effect:"Without a general store or marketplace, a settlement's effective level for item availability drops by 2." },
   { name:"Gladiatorial Arena", level:15, lots:4, cost:{rp:58,lumber:10,stone:30}, construction:{skill:"Warfare",rank:"master",dc:34}, category:["Edifice","Famous","Infamous","Yard"], upgradeFrom:"Arena", itemBonus:"+3 item bonus to Celebrate Holiday, Hire Adventurers, and Warfare checks to Quell Unrest", effect:"Lets a PC here retrain combat feats even faster than a plain Arena.", companionLocked:"Amiri" },
@@ -275,7 +275,7 @@ const KM_STRUCTURES = [
   { name:"Smithy", level:3, lots:1, cost:{rp:8,lumber:2,ore:1,stone:1}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Trade Commodities, +1 to Outfit Army", effect:"Bonus to Craft checks involving metalwork while here." },
   { name:"Specialized Artisan", level:4, lots:1, cost:{rp:10,lumber:4,luxuries:1}, construction:{skill:"Trade",rank:"expert",dc:19}, category:["Building"], itemBonus:"+1 item bonus to Craft Luxuries", effect:"Bonus to Craft checks for fine/specialty goods while here." },
   { name:"Stable", level:3, lots:1, cost:{rp:10,lumber:2}, construction:{skill:"Wilderness",rank:"trained",dc:18}, category:["Yard"], itemBonus:"+1 item bonus to Establish Trade Agreement", effect:"Houses, trains, and sells mounts." },
-  { name:"Stockyard", level:3, lots:4, cost:{rp:20,lumber:4}, construction:{skill:"Industry",rank:null,dc:18}, category:["Yard"], itemBonus:"+1 item bonus to Gather Livestock", effect:"Reduces the settlement's Consumption by 1." },
+  { name:"Stockyard", level:3, lots:4, cost:{rp:20,lumber:4}, construction:{skill:"Industry",rank:null,dc:18}, category:["Yard"], itemBonus:"+1 item bonus to Gather Livestock", effect:"Reduces the settlement's Consumption by 1.", consumptionBonus:1 },
   { name:"Stonemason", level:3, lots:2, cost:{rp:16,lumber:2}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Establish Work Site (quarry)", effect:"Each stonemason adds 1 to your kingdom's maximum Stone storage.", storageBonus:{good:"Stone", amt:1} },
   { name:"Tannery", level:3, lots:1, cost:{rp:6,lumber:2}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Trade Commodities", effect:"Cannot share a block with Residential structures except Tenements." },
   { name:"Tavern, Dive", level:1, lots:1, cost:{rp:12,lumber:1}, construction:{skill:"Trade",rank:"trained",dc:15}, upgradeTo:["Tavern, Popular"], category:["Building"], effect:"First one built in a turn reduces Unrest by 1 but raises Crime by 1." },
@@ -330,6 +330,16 @@ function workSiteNamesForTerrain(terrain){
     return !def.terrains || def.terrains.includes(terrain);
   });
 }
+// Establish Work Site (2e.aonprd.com/Actions.aspx?ID=1392) spends "RP as determined by
+// the hex's most inhospitable terrain" via the "Building on Rough Terrain" sidebar
+// (Kingmaker AP p.519) — AoN's page text references that sidebar but doesn't reproduce
+// its numbers, so this table is compiled from community transcriptions of it, not the
+// primary source directly. Worth double-checking against the book if it ever looks off.
+const WORK_SITE_TERRAIN_RP_COST = {Forest:4, Hill:2, Mountain:12, Plains:1, Swamp:8};
+function currentControlDC(){
+  const baseDC = CONTROL_DC_BY_LEVEL[Math.min(20,Math.max(1,state.level))] || 14;
+  return baseDC + sizeRow(state.size).mod;
+}
 
 const HEX_TYPE_SYMBOLS = {
   'Capital':'♜\uFE0E', 'Claimed Territory':'⚑\uFE0E',
@@ -380,12 +390,31 @@ function gridAllBlocksMinFill(lots, blockCount, min){
   return true;
 }
 // Village -> Town -> City -> Metropolis, gated by kingdom level + how full the
-// settlement's current blocks are — see the task brief's exact thresholds.
+// settlement's current blocks are — see the task brief's exact thresholds. This is
+// fully repeatable: nothing here is a one-shot, each tier re-evaluates from scratch
+// every render, so filling more blocks after a grow always re-opens the next one.
 function settlementGrowthTarget(s){
   if(s.type==='Village' && state.level>=3 && gridBlockFillCount(s.grid.lots[0])>=4) return 'Town';
   if(s.type==='Town' && state.level>=9 && gridAllBlocksMinFill(s.grid.lots, s.grid.blocks, 2)) return 'City';
   if(s.type==='City' && state.level>=15 && gridAllBlocksMinFill(s.grid.lots, 9, 2)) return 'Metropolis';
   return null;
+}
+// Explains exactly what's still missing for the next tier, so an ineligible settlement
+// never just silently shows nothing — that silence is what read as "stuck forever".
+function settlementGrowthProgress(s){
+  if(s.type==='Metropolis') return '';
+  const need = [];
+  const blockCount = s.type==='Village' ? 1 : (s.type==='Town' ? s.grid.blocks : 9);
+  const minFill = s.type==='Village' ? 4 : 2;
+  const shortBlocks = [];
+  for(let i=0;i<blockCount;i++){ if(gridBlockFillCount(s.grid.lots[i])<minFill) shortBlocks.push(i+1); }
+  const levelNeeded = s.type==='Village' ? 3 : (s.type==='Town' ? 9 : 15);
+  const nextTier = s.type==='Village' ? 'Town' : (s.type==='Town' ? 'City' : 'Metropolis');
+  if(state.level<levelNeeded) need.push(`kingdom level ${levelNeeded} (currently ${state.level})`);
+  if(shortBlocks.length) need.push(s.type==='Village'
+    ? `the starting block full (${gridBlockFillCount(s.grid.lots[0])}/4 lots)`
+    : `block${shortBlocks.length>1?'s':''} ${shortBlocks.join(', ')} to reach ${minFill}+ lots each`);
+  return need.length ? `Needs ${need.join(' and ')} to grow to ${nextTier}.` : '';
 }
 function growSettlementTo(id, targetType, extraBlocks){
   const s = state.settlements.find(x=>x.id===id);
@@ -396,8 +425,10 @@ function growSettlementTo(id, targetType, extraBlocks){
   s.type = targetType;
   scheduleSave(); renderNotesTab();
 }
-function structureStorageBonus(good){
-  let bonus = 0;
+// Shared walk over every currently-placed structure instance (deduped by lot-group id
+// so a multi-lot structure is only visited once) — storage/ruin/consumption bonuses
+// all read off this the same way ability-score tags read off abilitySources().
+function forEachPlacedStructure(cb){
   const seen = new Set();
   state.settlements.forEach(s=>{
     [s.grid.lots, s.grid.lots2].forEach(lots=>{
@@ -405,13 +436,69 @@ function structureStorageBonus(good){
         if(!slot || seen.has(slot.g)) return;
         seen.add(slot.g);
         const def = KM_STRUCTURES.find(x=>x.name===slot.name);
-        if(def && def.storageBonus && def.storageBonus.good===good) bonus += def.storageBonus.amt;
+        if(def) cb(def, slot, s);
       }));
     });
   });
+}
+function structureStorageBonus(good){
+  let bonus = 0;
+  forEachPlacedStructure(def=>{ if(def.storageBonus && def.storageBonus.good===good) bonus += def.storageBonus.amt; });
   return bonus;
 }
+// Attribution tags for a commodity's storage bonus — one entry per contributing
+// structure instance (not merged), matching the ability-tag "Republic +2" pattern.
+function structureStorageTags(good){
+  const tags = [];
+  forEachPlacedStructure((def,slot,s)=>{ if(def.storageBonus && def.storageBonus.good===good) tags.push({label:`${def.name} (${s.name})`, amt:def.storageBonus.amt}); });
+  return tags;
+}
+function structureConsumptionBonus(){
+  let bonus = 0;
+  forEachPlacedStructure(def=>{ if(def.consumptionBonus) bonus += def.consumptionBonus; });
+  return bonus;
+}
+// Illicit Market/Thieves' Guild have a fixed "+1 Crime" ruin field; Tenement's is
+// "of your choice" and gets resolved once at build time (see placeStructureInLot),
+// stored on the lot slot itself as ruinChoice so it can still be attributed per-instance.
+function structureRuinContribution(def, slot){
+  if(slot.ruinChoice) return {ruin:slot.ruinChoice, amt:1};
+  if(!def.ruin) return null;
+  const m = /\+(\d+)\s+(Corruption|Crime|Decay|Strife)/.exec(def.ruin);
+  return m ? {ruin:m[2], amt:parseInt(m[1],10)} : null;
+}
+function structureRuinTags(ruinName){
+  const tags = [];
+  forEachPlacedStructure((def,slot,s)=>{
+    const c = structureRuinContribution(def, slot);
+    if(c && c.ruin===ruinName) tags.push({label:`${def.name} (${s.name})`, amt:c.amt});
+  });
+  return tags;
+}
+function structureRuinBonus(ruinName){ return structureRuinTags(ruinName).reduce((sum,t)=>sum+t.amt,0); }
+// r.points/r.penalty stay exactly what manual +/- adjustments (ruinAdjust) have always
+// tracked; structure-sourced Ruin is layered on top live (removing the structure removes
+// its influence, same as removing any other ongoing bonus) rather than baked into a
+// one-time mutation, so it never needs separate refund/reversal bookkeeping.
+function effectiveRuinPenalty(name){
+  const r = state.ruin[name];
+  return r.penalty + Math.floor((r.points + structureRuinBonus(name)) / r.threshold);
+}
 function goodStorageCap(g){ return sizeRow(state.size).storage + structureStorageBonus(g); }
+function hexConsumptionReduction(){
+  let total = 0;
+  Object.values(state.hexes).forEach(h=>{
+    if(!h || !h.workSite) return;
+    const def = HEX_WORK_SITES[h.workSite];
+    if(def && def.consumptionReduction) total += def.consumptionReduction;
+  });
+  return total;
+}
+// Consumption owed this turn — base tracked value minus live reductions (Stockyard
+// structures, Farmland hexes), floored at 0. See the Upkeep wizard's Consumption step.
+function effectiveConsumptionOwed(){
+  return Math.max(0, state.consumption - structureConsumptionBonus() - hexConsumptionReduction());
+}
 
 /* =====================================================================
    STATE
@@ -420,7 +507,7 @@ let state = null;
 const DEFAULT_STATE = () => ({
   started:false,
   name:'Unnamed Realm', playerCharacter:'', level:1, xp:0, size:1, unrest:0, consumption:0, turn:1,
-  fameType:'Fame', fame:0, fameMax:3,
+  fameType:'Fame', fame:0, fameMax:3, rp:0, turnUpkeep:null,
   creation:{charter:'', charterFreeBoost:'', heartland:'', government:'', governmentFreeBoost:'', bonusBoost1:'', bonusBoost2:''},
   levelBoosts:[],
   kingdomFeats:[],
@@ -547,6 +634,7 @@ function normalizeState(){
   if(!state.settlements) state.settlements = [];
   state.settlements.forEach(s=>{
     if(!s.type) s.type = 'Village';
+    if(s.notes===undefined) s.notes = '';
     if(!s.grid){
       // migrating a save from before the urban grid existed — give it a grid sized
       // to roughly match its old freeform type instead of visually demoting it to Village
@@ -554,6 +642,12 @@ function normalizeState(){
       if(s.type==='Town') s.grid.blocks = 3;
       else if(s.type==='City'){ s.grid.blocks = 9; }
       else if(s.type==='Metropolis'){ s.grid.blocks = 9; s.grid.blocks2 = 9; }
+      // carry the old freeform structure tags forward as text rather than losing them —
+      // they don't map cleanly onto specific lots, so re-entering them into the grid is manual
+      if(Array.isArray(s.structures) && s.structures.length){
+        const carried = `Structures from before the lot grid (re-enter into the grid above if you want them tracked mechanically): ${s.structures.join(', ')}`;
+        s.notes = s.notes ? s.notes+'\n'+carried : carried;
+      }
     }
   });
   if(state.government && !state.creation.government){ state.creation.government = state.government; }
@@ -941,7 +1035,7 @@ function renderOverview(){
       <div class="seal"><div class="val mono">${state.level}</div><div class="lbl">Level</div><div class="sub">${state.xp} XP</div></div>
       <div class="seal"><div class="val mono">${totalDC}</div><div class="lbl">Control DC</div><div class="sub">${sz.type}</div></div>
       <div class="seal"><div class="val mono">${state.size}</div><div class="lbl">Size</div><div class="sub">hexes</div></div>
-      <div class="seal"><div class="val mono">${sz.die}×${diceCount}</div><div class="lbl">Resources</div><div class="sub">${featResourceDieBonus()?`RP / turn (+${featResourceDieBonus()} feat)`:'RP / turn'}</div></div>
+      <div class="seal"><div class="val mono">${state.rp}</div><div class="lbl">RP</div><div class="sub">${sz.die}×${diceCount}${featResourceDieBonus()?`+${featResourceDieBonus()}`:''}/turn</div></div>
       <div class="seal"><div class="val mono">${state.unrest}</div><div class="lbl">Unrest</div><div class="sub">${unrestPenalty(state.unrest)<0?fmt(unrestPenalty(state.unrest))+' checks':'no penalty'}</div></div>
       <div class="seal"><div class="val mono">${state.fame}</div><div class="lbl">${state.fameType}</div><div class="sub">of ${state.fameMax}</div></div>
     </div>
@@ -1011,9 +1105,9 @@ function renderOverview(){
     </div>
 
     <div class="card">
-      <div class="card-head-row"><h3 style="margin-bottom:0;">Work Sites</h3><span class="pill">${Object.values(state.hexes).filter(h=>h&&h.workSite).length} active</span></div>
-      <div class="hint" style="margin-top:0;">Collects this turn's yield from every hex with a Work Site — Lumber Camps, Mines, and Quarries add to your stockpiles (doubled if the hex's Resources field names that commodity), Farmland reduces Consumption. Excess beyond storage caps is lost, per the real upkeep rule. Current Consumption: ${state.consumption}.</div>
-      <button class="action" onclick="processWorkSitesThisTurn()">Process Work Sites</button>
+      <div class="card-head-row"><h3 style="margin-bottom:0;">Upkeep</h3>${state.turnUpkeep ? `<span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">step ${state.turnUpkeep.step+1} of 5</span>` : ''}</div>
+      <div class="hint" style="margin-top:0;">Walks through Fame, Ruin, Resource Dice, Work Site production, and Consumption for this turn. You can close it partway through and resume later — nothing is lost.</div>
+      <button class="action" onclick="openTurnUpkeepWizard()">${state.turnUpkeep ? 'Resume Process Turn' : 'Process Turn'}</button>
     </div>
 
     <div class="card">
@@ -1080,6 +1174,8 @@ function renderAbilities(){
     const tags = abilitySources()[a]||[];
     const rn = RUIN_MAP[a];
     const ruin = state.ruin[rn];
+    const ruinTags = structureRuinTags(rn);
+    const effPenalty = effectiveRuinPenalty(rn);
     const abSkills = SKILLS.filter(([,ab])=>ab===a);
     return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -1098,20 +1194,21 @@ function renderAbilities(){
       <div class="row" style="margin-top:12px;">
         <div class="label" style="display:flex;align-items:center;gap:6px;"><span style="color:var(--rust);">†</span>${rn}</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span class="mono" style="font-size:12px;color:${ruin.penalty?'var(--rust)':'var(--text-muted)'};">${ruin.points}/${ruin.threshold}${ruin.penalty?` (${fmt(-ruin.penalty)})`:''}</span>
+          <span class="mono" style="font-size:12px;color:${effPenalty?'var(--rust)':'var(--text-muted)'};">${ruin.points}/${ruin.threshold}${effPenalty?` (${fmt(-effPenalty)})`:''}</span>
           <div class="stepper">
             <button onclick="ruinAdjust('${rn}',-1)">−</button>
             <button onclick="ruinAdjust('${rn}',1)">+</button>
           </div>
         </div>
       </div>
+      ${ruinTags.length ? `<div class="ability-tags">${ruinTags.map(t=>`<span class="ability-tag neg">${escapeHtml(t.label)} +${t.amt} ${rn}</span>`).join('')}</div>` : ''}
 
       <div style="margin-top:6px;">
         ${abSkills.map(([name])=>{
           const s = state.skills[name];
           const profBonus = RANK_BONUS(s.rank, state.level);
           const featBonus = featSkillBonus(name);
-          const total = mod(score) + profBonus + featBonus + (s.status||0) - ruin.penalty - Math.abs(Math.min(0,unrestPenalty(state.unrest)));
+          const total = mod(score) + profBonus + featBonus + (s.status||0) - effPenalty - Math.abs(Math.min(0,unrestPenalty(state.unrest)));
           const trainedBy = skillTrainedSource(name);
           return `<div class="row">
             <div class="label">${name}${trainedBy?`<span class="skill-source-icon" title="Trained via ${escapeAttr(trainedBy)}">‡</span>`:''}${featBonus?`<span class="skill-source-icon" title="Feat bonus">✦</span>`:''}<small>${RANK_LABEL[s.rank]}</small></div>
@@ -1178,48 +1275,35 @@ function toggleInvest(role, checked){
 /* ---------- GOODS ---------- */
 function renderGoods(){
   document.getElementById('storage-note').textContent = `base ${sizeRow(state.size).storage}, +storage structures`;
-  document.getElementById('goods-list').innerHTML = GOODS.map(g=>`
-    <div class="row">
-      <div class="label">${GOODS_ICON[g]} ${g}<small>max ${goodStorageCap(g)}</small></div>
-      <div class="stepper">
-        <button onclick="goodsAdjust('${g}',-1)">−</button>
-        <div class="amt mono">${state.goods[g]}</div>
-        <button onclick="goodsAdjust('${g}',1)">+</button>
+  document.getElementById('goods-list').innerHTML = GOODS.map(g=>{
+    const tags = structureStorageTags(g);
+    return `<div class="row" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="label">${GOODS_ICON[g]} ${g}<small>max ${goodStorageCap(g)}</small></div>
+        <div class="stepper">
+          <button onclick="goodsAdjust('${g}',-1)">−</button>
+          <div class="amt mono">${state.goods[g]}</div>
+          <button onclick="goodsAdjust('${g}',1)">+</button>
+        </div>
       </div>
-    </div>`).join('');
+      ${tags.length ? `<div class="ability-tags">${tags.map(t=>`<span class="ability-tag pos">${escapeHtml(t.label)} +${t.amt}</span>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+// Adds delta toward a cap without ever moving the value further from 0 than it already
+// was above that cap — e.g. if storage-bonus structures were removed and a stockpile is
+// now sitting above its (lower) cap, further production/spending shouldn't suddenly snap
+// it down to the cap; it should just stop growing past its current level.
+function addWithCap(current, delta, cap){
+  return Math.max(0, Math.min(current+delta, Math.max(current, cap)));
 }
 function goodsAdjust(g, delta){
-  state.goods[g] = Math.max(0, Math.min(goodStorageCap(g), state.goods[g]+delta));
+  state.goods[g] = addWithCap(state.goods[g], delta, goodStorageCap(g));
   scheduleSave(); render();
 }
-// Upkeep Phase resource collection (2e.aonprd.com/Rules.aspx?ID=1795): "You gain 1
-// Commodity from each Work Site, or double that if the Work Site is in a Resource hex."
-// We treat a hex as a Resource hex for a given commodity if its freeform Resources field
-// mentions that commodity by name. Farmland isn't a commodity work site (Establish Farmland,
-// Actions.aspx?ID=1383) — it reduces Consumption by 1 per hex instead.
-function processWorkSitesThisTurn(){
-  const gains = {};
-  let consumptionReduced = 0;
-  Object.values(state.hexes).forEach(h=>{
-    if(!h || !h.workSite) return;
-    const def = HEX_WORK_SITES[h.workSite];
-    if(!def) return;
-    if(def.good){
-      const isResourceHex = !!(h.resources && h.resources.toLowerCase().includes(def.good.toLowerCase()));
-      const yieldAmt = isResourceHex ? 2 : 1;
-      const before = state.goods[def.good];
-      state.goods[def.good] = Math.min(goodStorageCap(def.good), before + yieldAmt);
-      gains[def.good] = (gains[def.good]||0) + (state.goods[def.good] - before);
-    }
-    if(def.consumptionReduction) consumptionReduced += def.consumptionReduction;
-  });
-  if(consumptionReduced>0) state.consumption = Math.max(0, state.consumption - consumptionReduced);
-  scheduleSave();
-  render();
-  const parts = Object.keys(gains).filter(g=>gains[g]>0).map(g=>`+${gains[g]} ${g}`);
-  if(consumptionReduced>0) parts.push(`Consumption −${consumptionReduced}`);
-  alert(parts.length ? `Work sites produced: ${parts.join(', ')}.` : 'No Work Sites produced anything this turn — check hex assignments and storage caps.');
-}
+// Work Site commodity collection now happens inside the guided Upkeep wizard
+// (openTurnUpkeepWizard, step 4) alongside Ruin/Resource-Dice/Consumption, matching
+// the real Upkeep Phase order instead of standing alone. See collectWorkSiteYields().
 function ruinAdjust(name, delta){
   const r = state.ruin[name];
   r.points = Math.max(0, r.points+delta);
@@ -1357,6 +1441,299 @@ function addLogEntry(){
 }
 function removeLogEntry(i){ state.log.splice(i,1); scheduleSave(); render(); }
 
+/* =====================================================================
+   TURN UPKEEP WIZARD — guided walkthrough of the Upkeep Phase only
+   (2e.aonprd.com/Rules.aspx?ID=1795); Commerce/Activity/Event phases are
+   separate future work. Doesn't replace the manual turn stepper — this is
+   the primary way to advance a turn, alongside it. Progress is persisted
+   in state.turnUpkeep so closing partway through and resuming later (or
+   skipping a step whose roll hasn't happened at the table yet) both work.
+===================================================================== */
+const UPKEEP_STEPS = ['fame','ruin','resourceDice','workSites','consumption'];
+function openTurnUpkeepWizard(){
+  if(!state.turnUpkeep) state.turnUpkeep = {step:0, fame:null, ruin:null, resourceDice:null, workSites:null, consumption:null};
+  renderTurnUpkeepWizard();
+}
+function closeTurnUpkeepWizard(){
+  const el = document.getElementById('upkeep-overlay');
+  if(el) el.remove();
+  scheduleSave();
+  render();
+}
+function upkeepGoToStep(n){
+  state.turnUpkeep.step = Math.max(0, Math.min(4, n));
+  scheduleSave();
+  renderTurnUpkeepWizard();
+}
+function upkeepSkipStep(){
+  const key = UPKEEP_STEPS[state.turnUpkeep.step];
+  state.turnUpkeep[key] = {skipped:true};
+  if(state.turnUpkeep.step>=4) finishTurnUpkeep();
+  else upkeepGoToStep(state.turnUpkeep.step+1);
+}
+function upkeepNav(canSkip){
+  const u = state.turnUpkeep;
+  return `<div class="creation-nav" style="margin-top:14px;flex-wrap:wrap;gap:8px;">
+    <button class="ghost" style="flex:0 0 100%;" onclick="closeTurnUpkeepWizard()">Close for now (resume later)</button>
+    ${u.step>0 ? `<button class="ghost" onclick="upkeepGoToStep(${u.step-1})">Back</button>` : ''}
+    ${canSkip ? `<button class="ghost" onclick="upkeepSkipStep()">Skip for now</button>` : ''}
+    ${u.step<4 ? `<button class="action" onclick="upkeepGoToStep(${u.step+1})">Next</button>` : `<button class="action" onclick="finishTurnUpkeep()">Finish &amp; log turn</button>`}
+  </div>`;
+}
+function renderTurnUpkeepWizard(){
+  const u = state.turnUpkeep;
+  if(!u) return;
+  let overlay = document.getElementById('upkeep-overlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'upkeep-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+    document.body.appendChild(overlay);
+  }
+  const stepKey = UPKEEP_STEPS[u.step];
+  const renderers = {fame:renderUpkeepFameStep, ruin:renderUpkeepRuinStep, resourceDice:renderUpkeepResourceDiceStep, workSites:renderUpkeepWorkSitesStep, consumption:renderUpkeepConsumptionStep};
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <div class="hint" style="margin-top:0;">Turn ${state.turn} Upkeep — step ${u.step+1} of 5</div>
+    ${renderers[stepKey]()}
+  </div>`;
+}
+
+/* ---- step 1: Fame/Infamy ---- */
+function renderUpkeepFameStep(){
+  const u = state.turnUpkeep;
+  if(u.fame){
+    return `<h3>1. ${state.fameType}</h3><div class="hint" style="margin-top:0;">Applied: +${u.fame.amount} ${state.fameType} (now ${state.fame}).</div>${upkeepNav(false)}`;
+  }
+  return `<h3>1. ${state.fameType}</h3>
+    <div class="hint" style="margin-top:0;">Automatic: your kingdom gains +1 ${state.fameType}, capped at ${state.fameMax}.</div>
+    <button class="action" onclick="applyUpkeepFame()">Apply +1 ${state.fameType}</button>
+    ${upkeepNav(true)}`;
+}
+function applyUpkeepFame(){
+  state.fame = Math.min(state.fameMax, state.fame+1);
+  state.turnUpkeep.fame = {applied:true, amount:1};
+  scheduleSave();
+  renderTurnUpkeepWizard();
+}
+
+/* ---- step 2: Ruin — only triggers at Unrest 10+: 1d10 distributed among the four
+   Ruins, then a DC 11 flat check; failure loses a hex (GM/player choice which one,
+   resolved on the Map tab — not auto-selected here). ---- */
+let upkeepRuinPending = null;
+function renderUpkeepRuinStep(){
+  const u = state.turnUpkeep;
+  if(u.ruin){
+    let detail;
+    if(u.ruin.skipped) detail = 'Skipped for now.';
+    else if(u.ruin.triggered===false) detail = 'Not triggered — Unrest was below 10.';
+    else{
+      const dist = Object.entries(u.ruin.distributed).filter(([,v])=>v).map(([k,v])=>`${k} +${v}`).join(', ')||'none';
+      detail = `Gained ${u.ruin.rolled} Ruin (${dist}). DC 11 flat check rolled ${u.ruin.checkRoll} — ${u.ruin.hexLost?'failed, a hex was lost (remove it on the Map tab)':'succeeded'}.`;
+    }
+    return `<h3>2. Ruin</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
+  }
+  if(state.unrest<10){
+    return `<h3>2. Ruin</h3>
+      <div class="hint" style="margin-top:0;">Not triggered this turn — Ruin only accumulates when Unrest is 10 or higher (currently ${state.unrest}).</div>
+      <button class="action" onclick="applyUpkeepRuinNotTriggered()">Continue</button>
+      ${upkeepNav(false)}`;
+  }
+  return `<h3>2. Ruin</h3>
+    <div class="hint" style="margin-top:0;">Unrest is ${state.unrest} (10+) — the kingdom gains 1d10 Ruin. Roll it and enter the result:</div>
+    <input class="num" type="number" id="upkeep-ruin-roll" min="1" max="10" placeholder="1d10 result">
+    <button class="action" style="margin-top:8px;" onclick="upkeepRuinRolled()">Confirm roll</button>
+    ${upkeepNav(true)}`;
+}
+function applyUpkeepRuinNotTriggered(){
+  state.turnUpkeep.ruin = {applied:true, triggered:false};
+  scheduleSave();
+  renderTurnUpkeepWizard();
+}
+function upkeepRuinRolled(){
+  const v = parseInt(document.getElementById('upkeep-ruin-roll').value,10);
+  if(!v || v<1 || v>10){ alert('Enter the 1d10 result (1-10).'); return; }
+  upkeepRuinPending = {rolled:v};
+  const overlay = document.getElementById('upkeep-overlay');
+  overlay.querySelector('.card').innerHTML = `
+    <div class="hint" style="margin-top:0;">Turn ${state.turn} Upkeep — step 2 of 5</div>
+    <h3>2. Ruin — distribute ${v} point${v>1?'s':''}</h3>
+    <div class="hint" style="margin-top:0;">Split the ${v} points however you like among the four Ruins.</div>
+    ${['Corruption','Crime','Decay','Strife'].map(r=>`
+      <div class="row">
+        <div class="label">${r}</div>
+        <input class="num" type="number" min="0" max="${v}" value="0" id="upkeep-ruin-dist-${r}" onchange="upkeepValidateRuinDistribution()">
+      </div>`).join('')}
+    <div class="hint" id="upkeep-ruin-dist-hint" style="margin-top:6px;">0 of ${v} distributed.</div>
+    <button class="action" id="upkeep-ruin-dist-confirm" style="margin-top:8px;opacity:.4;pointer-events:none;" onclick="confirmUpkeepRuinDistribution()">Confirm distribution</button>`;
+}
+function upkeepValidateRuinDistribution(){
+  const rolled = upkeepRuinPending.rolled;
+  const sum = ['Corruption','Crime','Decay','Strife'].reduce((t,r)=>t+(parseInt(document.getElementById(`upkeep-ruin-dist-${r}`).value,10)||0),0);
+  document.getElementById('upkeep-ruin-dist-hint').textContent = `${sum} of ${rolled} distributed.`;
+  const btn = document.getElementById('upkeep-ruin-dist-confirm');
+  btn.style.opacity = sum===rolled ? '1' : '.4';
+  btn.style.pointerEvents = sum===rolled ? 'auto' : 'none';
+}
+function confirmUpkeepRuinDistribution(){
+  const distributed = {};
+  ['Corruption','Crime','Decay','Strife'].forEach(r=>{ distributed[r] = parseInt(document.getElementById(`upkeep-ruin-dist-${r}`).value,10)||0; });
+  Object.entries(distributed).forEach(([r,amt])=>{ if(amt) ruinAdjust(r, amt); });
+  upkeepRuinPending.distributed = distributed;
+  const overlay = document.getElementById('upkeep-overlay');
+  overlay.querySelector('.card').innerHTML = `
+    <div class="hint" style="margin-top:0;">Turn ${state.turn} Upkeep — step 2 of 5</div>
+    <h3>2. Ruin — DC 11 flat check</h3>
+    <div class="hint" style="margin-top:0;">Roll a flat check (d20, no modifiers) against DC 11. Failure loses one hex.</div>
+    <input class="num" type="number" id="upkeep-ruin-check" min="1" max="20" placeholder="d20 result">
+    <button class="action" style="margin-top:8px;" onclick="confirmUpkeepRuinCheck()">Confirm roll</button>`;
+}
+function confirmUpkeepRuinCheck(){
+  const roll = parseInt(document.getElementById('upkeep-ruin-check').value,10);
+  if(!roll || roll<1 || roll>20){ alert('Enter the d20 result (1-20).'); return; }
+  const hexLost = roll<11;
+  state.turnUpkeep.ruin = {applied:true, triggered:true, rolled:upkeepRuinPending.rolled, distributed:upkeepRuinPending.distributed, checkRoll:roll, hexLost};
+  upkeepRuinPending = null;
+  scheduleSave();
+  if(hexLost) alert('The flat check failed — the kingdom loses one hex. Choose which one and remove it from the Map tab.');
+  upkeepGoToStep(state.turnUpkeep.step+1);
+}
+
+/* ---- step 3: Resource Dice -> RP (a real roll the app only used to label before) ---- */
+function renderUpkeepResourceDiceStep(){
+  const u = state.turnUpkeep;
+  if(u.resourceDice){
+    const detail = u.resourceDice.skipped ? 'Skipped for now.' : `Rolled ${u.resourceDice.rolled} — added to RP (now ${state.rp}).`;
+    return `<h3>3. Resource Dice</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
+  }
+  const sz = sizeRow(state.size);
+  const diceCount = state.level + 4 + featResourceDieBonus();
+  return `<h3>3. Resource Dice</h3>
+    <div class="hint" style="margin-top:0;">Roll ${sz.die}×${diceCount} and enter the total — it's added to your RP balance (currently ${state.rp}).</div>
+    <input class="num" type="number" min="0" id="upkeep-rd-roll" placeholder="Rolled total">
+    <button class="action" style="margin-top:8px;" onclick="confirmUpkeepResourceDice()">Add to RP</button>
+    ${upkeepNav(true)}`;
+}
+function confirmUpkeepResourceDice(){
+  const v = parseInt(document.getElementById('upkeep-rd-roll').value,10);
+  if(isNaN(v) || v<0){ alert('Enter the rolled total.'); return; }
+  state.rp += v;
+  state.turnUpkeep.resourceDice = {applied:true, rolled:v};
+  scheduleSave();
+  renderTurnUpkeepWizard();
+}
+
+/* ---- step 4: Work Site commodities — flat and automatic, not a roll ---- */
+function collectWorkSiteYields(){
+  const gains = {};
+  Object.values(state.hexes).forEach(h=>{
+    if(!h || !h.workSite) return;
+    const def = HEX_WORK_SITES[h.workSite];
+    if(!def || !def.good) return;
+    const yieldAmt = h.resourceFlag ? 2 : 1;
+    const before = state.goods[def.good];
+    state.goods[def.good] = addWithCap(before, yieldAmt, goodStorageCap(def.good));
+    gains[def.good] = (gains[def.good]||0) + (state.goods[def.good]-before);
+  });
+  return gains;
+}
+function renderUpkeepWorkSitesStep(){
+  const u = state.turnUpkeep;
+  if(u.workSites){
+    if(u.workSites.skipped) return `<h3>4. Work Site commodities</h3><div class="hint" style="margin-top:0;">Skipped for now.</div>${upkeepNav(false)}`;
+    const parts = Object.keys(u.workSites.summary).filter(k=>u.workSites.summary[k]>0).map(k=>`+${u.workSites.summary[k]} ${k}`);
+    return `<h3>4. Work Site commodities</h3><div class="hint" style="margin-top:0;">${parts.length?parts.join(', '):'No Work Sites produced anything (check storage caps and hex assignments).'}</div>${upkeepNav(false)}`;
+  }
+  const activeCount = Object.values(state.hexes).filter(h=>h&&h.workSite).length;
+  return `<h3>4. Work Site commodities</h3>
+    <div class="hint" style="margin-top:0;">Automatic — ${activeCount} active Work Site${activeCount===1?'':'s'}, each adding 1 commodity (2 if flagged as a Resource hex), capped at storage.</div>
+    <button class="action" onclick="applyUpkeepWorkSites()">Collect</button>
+    ${upkeepNav(true)}`;
+}
+function applyUpkeepWorkSites(){
+  state.turnUpkeep.workSites = {applied:true, summary:collectWorkSiteYields()};
+  scheduleSave();
+  renderTurnUpkeepWizard();
+}
+
+/* ---- step 5: Consumption — paid from Food; shortfall costs 5 RP/point or +1d4 Unrest ---- */
+function renderUpkeepConsumptionStep(){
+  const u = state.turnUpkeep;
+  if(u.consumption){
+    if(u.consumption.skipped) return `<h3>5. Consumption</h3><div class="hint" style="margin-top:0;">Skipped for now.</div>${upkeepNav(false)}`;
+    const c = u.consumption;
+    let detail = `Owed ${c.owed} Food, paid ${c.paidFromFood} from stockpile.`;
+    if(c.shortfall) detail += c.choice==='rp' ? ` Spent ${c.shortfall*5} RP for the ${c.shortfall} unpaid.` : ` Gained ${c.unrestGain} Unrest for the ${c.shortfall} unpaid.`;
+    return `<h3>5. Consumption</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
+  }
+  const owed = effectiveConsumptionOwed();
+  const available = state.goods.Food;
+  const shortfall = Math.max(0, owed-available);
+  if(shortfall===0){
+    return `<h3>5. Consumption</h3>
+      <div class="hint" style="margin-top:0;">Owed ${owed} Food (base ${state.consumption}, reduced by storage-bonus structures and Farmland hexes). You have ${available} — fully covered.</div>
+      <button class="action" onclick="applyUpkeepConsumption(${owed},${owed},0,null,0)">Pay ${owed} Food</button>
+      ${upkeepNav(true)}`;
+  }
+  return `<h3>5. Consumption</h3>
+    <div class="hint" style="margin-top:0;">Owed ${owed} Food, you have ${available} — a shortfall of ${shortfall}. Per the rules, for the unpaid amount you either spend 5 RP per point or increase Unrest by 1d4 (not per point — one roll covers the whole shortfall).</div>
+    <button class="ghost" ${state.rp<shortfall*5?'style="opacity:.45;pointer-events:none;"':''} onclick="chooseUpkeepConsumptionShortfall(${owed},${available},${shortfall})">Spend ${shortfall*5} RP (have ${state.rp})</button>
+    <div class="hint" style="margin:10px 0 4px;">Or roll 1d4 and add it to Unrest:</div>
+    <input class="num" type="number" min="1" max="4" id="upkeep-consumption-unrest-roll" placeholder="1d4 result">
+    <button class="ghost" style="margin-top:6px;" onclick="chooseUpkeepConsumptionShortfallUnrest(${owed},${available},${shortfall})">Add to Unrest</button>
+    ${upkeepNav(true)}`;
+}
+function applyUpkeepConsumption(owed, paidFromFood, shortfall, choice, extra){
+  state.goods.Food = Math.max(0, state.goods.Food - paidFromFood);
+  state.turnUpkeep.consumption = {applied:true, owed, paidFromFood, shortfall, choice, unrestGain:choice==='unrest'?extra:0};
+  scheduleSave();
+  renderTurnUpkeepWizard();
+}
+function chooseUpkeepConsumptionShortfall(owed, available, shortfall){
+  const cost = shortfall*5;
+  if(state.rp<cost){ alert('Not enough RP.'); return; }
+  state.rp -= cost;
+  applyUpkeepConsumption(owed, available, shortfall, 'rp', 0);
+}
+function chooseUpkeepConsumptionShortfallUnrest(owed, available, shortfall){
+  const roll = parseInt(document.getElementById('upkeep-consumption-unrest-roll').value,10);
+  if(!roll || roll<1 || roll>4){ alert('Enter the 1d4 result (1-4).'); return; }
+  state.unrest += roll;
+  applyUpkeepConsumption(owed, available, shortfall, 'unrest', roll);
+}
+
+function finishTurnUpkeep(){
+  const u = state.turnUpkeep;
+  const lines = [];
+  if(u.fame) lines.push(`${state.fameType} +${u.fame.amount}`);
+  if(u.ruin){
+    if(u.ruin.skipped) lines.push('Ruin: skipped');
+    else if(u.ruin.triggered===false) lines.push('Ruin: not triggered');
+    else{
+      const dist = Object.entries(u.ruin.distributed).filter(([,v])=>v).map(([k,v])=>`${k} +${v}`).join(', ')||'none';
+      lines.push(`Ruin: +${u.ruin.rolled} (${dist}); DC 11 check ${u.ruin.checkRoll} — ${u.ruin.hexLost?'failed, hex lost':'succeeded'}`);
+    }
+  }
+  if(u.resourceDice) lines.push(u.resourceDice.skipped ? 'Resource Dice: skipped' : `Resource Dice: +${u.resourceDice.rolled} RP`);
+  if(u.workSites){
+    if(u.workSites.skipped) lines.push('Work Sites: skipped');
+    else{
+      const parts = Object.keys(u.workSites.summary).filter(k=>u.workSites.summary[k]>0).map(k=>`+${u.workSites.summary[k]} ${k}`);
+      lines.push(`Work Sites: ${parts.length?parts.join(', '):'no yield'}`);
+    }
+  }
+  if(u.consumption){
+    if(u.consumption.skipped) lines.push('Consumption: skipped');
+    else{
+      let s = `Consumption: paid ${u.consumption.paidFromFood} Food`;
+      if(u.consumption.shortfall) s += u.consumption.choice==='rp' ? `, spent ${u.consumption.shortfall*5} RP` : `, +${u.consumption.unrestGain} Unrest`;
+      lines.push(s);
+    }
+  }
+  state.log.unshift({turn:state.turn, note:'Upkeep — '+(lines.join('; ')||'nothing processed')});
+  state.turnUpkeep = null;
+  closeTurnUpkeepWizard();
+}
+
 /* ---------- SETTLEMENTS ---------- */
 function addSettlement(){
   const id = Date.now();
@@ -1402,18 +1779,40 @@ function openLotPicker(sid, gridNum, blockIdx){
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
     <h3>Build in ${escapeHtml(s.name)}</h3>
-    <div class="hint" style="margin-top:0;">This block has ${emptyCount} open lot${emptyCount===1?'':'s'}. Structures that fit:</div>
+    <div class="hint" style="margin-top:0;">This block has ${emptyCount} open lot${emptyCount===1?'':'s'}. RP balance: ${state.rp}. Structures that fit:</div>
     <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
-      ${options.length ? options.map(st=>`
-        <button type="button" class="option-card" onclick="placeStructureInLot(${sid},${gridNum},${blockIdx},'${escapeAttr(st.name)}')">
-          <div class="opt-name">${escapeHtml(st.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${st.lots} lot${st.lots>1?'s':''})</span></div>
-          <div class="opt-detail">${escapeHtml(st.effect)}</div>
-        </button>`).join('') : `<div class="hint" style="margin-top:0;">Nothing fits here yet — needs more open lots in this block, or a higher kingdom level.</div>`}
+      ${options.length ? options.map(st=>{
+        const problem = affordabilityMessage(st.cost);
+        return `<button type="button" class="option-card" ${problem?'style="opacity:.45;pointer-events:none;"':''} onclick="placeStructureInLot(${sid},${gridNum},${blockIdx},'${escapeAttr(st.name)}')">
+          <div class="opt-name">${escapeHtml(st.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${st.lots} lot${st.lots>1?'s':''} · ${formatCost(st.cost)})</span></div>
+          <div class="opt-detail">${escapeHtml(st.effect)}${problem?` — <span style="color:var(--rust);">${escapeHtml(problem)}</span>`:''}</div>
+        </button>`;
+      }).join('') : `<div class="hint" style="margin-top:0;">Nothing fits here yet — needs more open lots in this block, or a higher kingdom level.</div>`}
     </div>
     <button class="ghost" style="margin-top:8px;" onclick="closeLotOverlay()">Cancel</button>
   </div>`;
   document.body.appendChild(overlay);
 }
+// Unlike skill-check DCs (resolved at the table), RP/commodity cost is pure arithmetic,
+// so it's enforced here rather than just displayed.
+function formatCost(cost){
+  const parts = [];
+  if(cost.rp) parts.push(cost.rp+' RP');
+  GOODS.forEach(g=>{ const k=g.toLowerCase(); if(cost[k]) parts.push(cost[k]+' '+g); });
+  return parts.length ? parts.join(', ') : 'free';
+}
+function affordabilityMessage(cost){
+  const rpCost = cost.rp||0;
+  if(state.rp < rpCost) return `Not enough RP — this costs ${rpCost} RP, you have ${state.rp}.`;
+  const short = [];
+  GOODS.forEach(g=>{ const k=g.toLowerCase(); const need=cost[k]||0; if(need>state.goods[g]) short.push(`${need} ${g} (have ${state.goods[g]})`); });
+  return short.length ? `Not enough commodities — needs ${short.join(', ')}.` : null;
+}
+function spendResources(cost){
+  state.rp = Math.max(0, state.rp - (cost.rp||0));
+  GOODS.forEach(g=>{ const k=g.toLowerCase(); const need=cost[k]||0; if(need) state.goods[g] = Math.max(0, state.goods[g]-need); });
+}
+let pendingStructurePlacement = null; // {sid,gridNum,blockIdx,structureName,emptyIdxs} while a Tenement-style ruin choice is open
 function placeStructureInLot(sid, gridNum, blockIdx, structureName){
   const s = state.settlements.find(x=>x.id===sid);
   if(!s) return;
@@ -1422,11 +1821,50 @@ function placeStructureInLot(sid, gridNum, blockIdx, structureName){
   const block = lotsForGrid(s, gridNum)[blockIdx];
   const emptyIdxs = block.map((v,i)=>v?-1:i).filter(i=>i!==-1);
   if(emptyIdxs.length < st.lots) return;
+  const problem = affordabilityMessage(st.cost);
+  if(problem){ alert(problem); return; }
+  if(st.ruin && /of your choice/i.test(st.ruin)){
+    pendingStructurePlacement = {sid, gridNum, blockIdx, structureName, emptyIdxs};
+    openRuinChoicePopup();
+    return;
+  }
+  finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, null);
+}
+function finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, ruinChoice){
+  const s = state.settlements.find(x=>x.id===sid);
+  const st = KM_STRUCTURES.find(x=>x.name===structureName);
+  if(!s || !st) return;
+  spendResources(st.cost);
+  const block = lotsForGrid(s, gridNum)[blockIdx];
   const g = 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  for(let i=0;i<st.lots;i++) block[emptyIdxs[i]] = {name:structureName, g};
+  for(let i=0;i<st.lots;i++){
+    const slot = {name:structureName, g};
+    if(ruinChoice) slot.ruinChoice = ruinChoice;
+    block[emptyIdxs[i]] = slot;
+  }
   closeLotOverlay();
   scheduleSave();
   renderNotesTab();
+}
+function openRuinChoicePopup(){
+  const overlay = document.createElement('div');
+  overlay.id = 'lot-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:360px;width:100%;margin:0;">
+    <h3>Which Ruin?</h3>
+    <div class="hint" style="margin-top:0;">This structure raises one Ruin track of your choice by 1, for as long as it stands.</div>
+    <div class="boost-picker" style="margin-top:10px;">
+      ${['Corruption','Crime','Decay','Strife'].map(r=>`<button type="button" onclick="chooseRuinForPendingStructure('${r}')">${r}</button>`).join('')}
+    </div>
+    <button class="ghost" style="margin-top:10px;" onclick="pendingStructurePlacement=null;closeLotOverlay();">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function chooseRuinForPendingStructure(ruinName){
+  if(!pendingStructurePlacement) return;
+  const {sid, gridNum, blockIdx, structureName, emptyIdxs} = pendingStructurePlacement;
+  pendingStructurePlacement = null;
+  finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, ruinName);
 }
 function openLotInfoPopup(sid, gridNum, blockIdx, groupId){
   const s = state.settlements.find(x=>x.id===sid);
@@ -1449,13 +1887,15 @@ function openLotInfoPopup(sid, gridNum, blockIdx, groupId){
       <div class="hint" style="margin:10px 0 4px;">Upgrade to:</div>
       ${upgradeOptions.map(u=>{
         const need = Math.max(0, u.lots - currentLots);
-        const fits = need<=emptyCount;
+        const roomFits = need<=emptyCount;
+        const problem = affordabilityMessage(u.cost);
+        const fits = roomFits && !problem;
         return `<button type="button" class="option-card" ${fits?'':'style="opacity:.45;pointer-events:none;"'} onclick="upgradeStructureGroup(${sid},${gridNum},${blockIdx},'${groupId}','${escapeAttr(u.name)}')">
-          <div class="opt-name">${escapeHtml(u.name)}</div>
-          <div class="opt-detail">${escapeHtml(u.effect)}${fits?'':' — not enough open lots in this block'}</div>
+          <div class="opt-name">${escapeHtml(u.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${formatCost(u.cost)})</span></div>
+          <div class="opt-detail">${escapeHtml(u.effect)}${!roomFits?' — not enough open lots in this block':(problem?' — '+escapeHtml(problem):'')}</div>
         </button>`;
       }).join('')}` : ''}
-    <button class="ghost danger-ghost" style="margin-top:10px;" onclick="removeStructureGroup(${sid},${gridNum},'${groupId}');closeLotOverlay();">Remove</button>
+    <button class="ghost danger-ghost" style="margin-top:10px;" onclick="removeStructureGroup(${sid},${gridNum},'${groupId}');closeLotOverlay();">Remove <span style="opacity:.7;">(RP/commodities already spent aren't refunded)</span></button>
     <button class="ghost" style="margin-top:8px;" onclick="closeLotOverlay()">Close</button>
   </div>`;
   document.body.appendChild(overlay);
@@ -1469,9 +1909,12 @@ function upgradeStructureGroup(sid, gridNum, blockIdx, groupId, newName){
   const newDef = KM_STRUCTURES.find(x=>x.name===newName);
   if(!oldSlots.length || !newDef) return;
   const need = newDef.lots - oldSlots.length;
+  const emptyIdxs = need>0 ? block.map((v,i)=>v?-1:i).filter(i=>i!==-1) : [];
+  if(need>0 && emptyIdxs.length<need){ alert('Not enough open lots in this block to upgrade to '+newName+'.'); return; }
+  const problem = affordabilityMessage(newDef.cost);
+  if(problem){ alert(problem); return; }
+  spendResources(newDef.cost);
   if(need>0){
-    const emptyIdxs = block.map((v,i)=>v?-1:i).filter(i=>i!==-1);
-    if(emptyIdxs.length<need){ alert('Not enough open lots in this block to upgrade to '+newName+'.'); return; }
     for(let i=0;i<need;i++){ block[emptyIdxs[i]] = {name:newName, g:groupId}; oldSlots.push(emptyIdxs[i]); }
   } else if(need<0){
     for(let i=0;i<(-need);i++){ block[oldSlots.pop()] = null; }
@@ -1540,7 +1983,7 @@ function confirmPick(){
 function pinCapitalLocation(col,row){
   const key = hexKey(col,row);
   const existing = state.hexes[key] || {note:''};
-  state.hexes[key] = {name: state.name, type:'Capital', note: existing.note||'', resources: existing.resources||'', features: existing.features||'', terrain: existing.terrain||'', workSite: existing.workSite||''};
+  state.hexes[key] = {name: state.name, type:'Capital', note: existing.note||'', resources: existing.resources||'', features: existing.features||'', terrain: existing.terrain||'', workSite: existing.workSite||'', resourceFlag: existing.resourceFlag||false};
   cancelPickLocation();
   scheduleSave();
   updateHexMarkers();
@@ -1567,8 +2010,8 @@ function pinSettlementLocation(col,row){
   }
   s.col = col; s.row = row;
   const key = hexKey(col,row);
-  const existing = state.hexes[key] || {name:'',type:'',note:'',resources:'',features:'',terrain:'',workSite:''};
-  state.hexes[key] = {name: s.name, type:'Settlement', note: existing.note||'', resources: existing.resources||'', features: existing.features||'', terrain: existing.terrain||'', workSite: existing.workSite||''};
+  const existing = state.hexes[key] || {name:'',type:'',note:'',resources:'',features:'',terrain:'',workSite:'',resourceFlag:false};
+  state.hexes[key] = {name: s.name, type:'Settlement', note: existing.note||'', resources: existing.resources||'', features: existing.features||'', terrain: existing.terrain||'', workSite: existing.workSite||'', resourceFlag: existing.resourceFlag||false};
   scheduleSave();
   updateHexMarkers();
   renderNotesTab();
@@ -1601,7 +2044,10 @@ function renderUrbanGrid(s, gridNum){
 }
 function renderGrowthPanel(s){
   const target = settlementGrowthTarget(s);
-  if(!target) return '';
+  if(!target){
+    const progress = settlementGrowthProgress(s);
+    return progress ? `<div class="hint" style="margin-top:10px;">${escapeHtml(progress)}</div>` : '';
+  }
   if(target==='Town'){
     return `<div class="hint" style="margin-top:10px;">Ready to grow to Town — choose how many additional blocks to unlock (2–4):</div>
       <div style="display:flex;gap:6px;margin-top:4px;">
@@ -1630,7 +2076,8 @@ function renderSettlementsList(){
       ${renderUrbanGrid(s, 1)}
       ${s.grid.blocks2>0 ? `<div class="hint" style="margin:10px 0 4px;">Second grid</div>${renderUrbanGrid(s, 2)}` : ''}
       ${renderGrowthPanel(s)}
-      <button class="ghost danger-ghost" style="margin-top:10px;" onclick="removeSettlement(${s.id})">Remove settlement</button>
+      <textarea class="wide" placeholder="Notes about this settlement..." rows="2" style="margin-top:10px;" onchange="state.settlements.find(x=>x.id===${s.id}).notes=this.value;scheduleSave();">${escapeHtml(s.notes||'')}</textarea>
+      <button class="ghost danger-ghost" style="margin-top:8px;" onclick="removeSettlement(${s.id})">Remove settlement</button>
     </div>`).join('') || '<div class="hint">No settlements founded yet.</div>';
 }
 
@@ -1923,6 +2370,33 @@ function closeHexTapPopup(){
   }
 }
 
+const HEX_RESOURCE_PRESETS = ['Furs','Game','Herbs','Gems'];
+const HEX_FEATURE_PRESETS = ['Ravine','Ruins','Cave','Sacred Site'];
+function toggleHexCustomField(field){
+  const sel = document.getElementById(`hex-${field}-select`);
+  document.getElementById(`hex-${field}-custom-row`).style.display = sel.value==='__custom__' ? 'flex' : 'none';
+}
+// Old freeform text becomes the Custom… selection automatically — nothing is lost
+// or silently blanked when a hex saved before this preset list existed is reopened.
+function setHexPresetField(field, value){
+  const presets = field==='resources' ? HEX_RESOURCE_PRESETS : HEX_FEATURE_PRESETS;
+  const sel = document.getElementById(`hex-${field}-select`);
+  const customRow = document.getElementById(`hex-${field}-custom-row`);
+  const customInput = document.getElementById(`hex-${field}-custom`);
+  if(value && !presets.includes(value)){
+    sel.value = '__custom__';
+    customRow.style.display = 'flex';
+    customInput.value = value;
+  } else {
+    sel.value = value || '';
+    customRow.style.display = 'none';
+    customInput.value = '';
+  }
+}
+function readHexPresetField(field){
+  const sel = document.getElementById(`hex-${field}-select`);
+  return sel.value==='__custom__' ? document.getElementById(`hex-${field}-custom`).value.trim() : sel.value;
+}
 function openHexPanel(col,row){
   activeHexKey = hexKey(col,row);
   const svg = document.getElementById('hexoverlay');
@@ -1931,15 +2405,17 @@ function openHexPanel(col,row){
     const poly = svg.querySelector(`[data-key="${activeHexKey}"]`);
     if(poly) poly.classList.add('selected');
   }
-  const h = state.hexes[activeHexKey] || {name:'',type:'',note:'',resources:'',features:'',terrain:'',workSite:''};
+  const h = state.hexes[activeHexKey] || {name:'',type:'',note:'',resources:'',features:'',terrain:'',workSite:'',resourceFlag:false};
   document.getElementById('hex-panel-title').textContent = 'Hex '+hexLabel(col,row);
   document.getElementById('hex-name').value = h.name||'';
   document.getElementById('hex-type').value = h.type||'';
-  document.getElementById('hex-resources').value = h.resources||'';
-  document.getElementById('hex-features').value = h.features||'';
   document.getElementById('hex-note').value = h.note||'';
   document.getElementById('hex-terrain').value = h.terrain||'';
-  populateWorkSiteSelect(h.workSite||'');
+  document.getElementById('hex-isresource').checked = !!h.resourceFlag;
+  setHexPresetField('resources', h.resources||'');
+  setHexPresetField('features', h.features||'');
+  document.getElementById('hex-worksite').value = h.workSite||'';
+  renderWorkSiteOptions();
   document.getElementById('hex-panel').classList.add('open');
 }
 function closeHexPanel(){
@@ -1948,31 +2424,58 @@ function closeHexPanel(){
   activeHexKey = null;
   document.getElementById('hex-panel').classList.remove('open');
 }
-function populateWorkSiteSelect(preserveValue){
+// Work Site is a picker (option-cards showing cost/DC), not a bare dropdown, and can be
+// re-opened to change or clear an already-set site at any time — nothing here is one-shot.
+function renderWorkSiteOptions(){
   const terrain = document.getElementById('hex-terrain').value;
+  const current = document.getElementById('hex-worksite').value || 'None';
   const names = workSiteNamesForTerrain(terrain);
-  const keep = names.includes(preserveValue) ? preserveValue : 'None';
-  document.getElementById('hex-worksite').innerHTML = names.map(n=>{
-    const val = n==='None' ? '' : n;
-    return `<option value="${val}" ${n===keep?'selected':''}>${n}</option>`;
+  const dc = currentControlDC();
+  document.getElementById('hex-worksite-options').innerHTML = names.map(n=>{
+    const isNone = n==='None';
+    const cost = WORK_SITE_TERRAIN_RP_COST[terrain]||0;
+    const detail = isNone
+      ? 'Clears the Work Site on this hex. Already-spent RP is not refunded.'
+      : `Engineering (untrained), basic check vs. Control DC ${dc}. Costs ${cost} RP to establish here (only charged if this isn't already the hex's Work Site).`;
+    return `<button type="button" class="option-card ${current===n?'selected':''}" style="padding:9px 12px;margin-bottom:6px;" onclick="pickHexWorkSite('${n}')">
+      <div class="opt-name" style="font-size:13px;">${n}</div>
+      <div class="opt-detail">${detail}</div>
+    </button>`;
   }).join('');
 }
+function pickHexWorkSite(name){
+  document.getElementById('hex-worksite').value = name==='None' ? '' : name;
+  renderWorkSiteOptions();
+}
 function onHexTerrainChange(){
-  populateWorkSiteSelect(document.getElementById('hex-worksite').value || 'None');
+  const names = workSiteNamesForTerrain(document.getElementById('hex-terrain').value);
+  const current = document.getElementById('hex-worksite').value;
+  if(current && !names.includes(current)) document.getElementById('hex-worksite').value = '';
+  renderWorkSiteOptions();
 }
 function saveHex(){
   if(!activeHexKey) return;
   const name = document.getElementById('hex-name').value.trim();
   const type = document.getElementById('hex-type').value;
-  const resources = document.getElementById('hex-resources').value.trim();
-  const features = document.getElementById('hex-features').value.trim();
+  const resources = readHexPresetField('resources');
+  const features = readHexPresetField('features');
   const note = document.getElementById('hex-note').value.trim();
   const terrain = document.getElementById('hex-terrain').value;
   const workSite = document.getElementById('hex-worksite').value;
-  if(!name && !type && !note && !resources && !features && !terrain && !workSite){
+  const resourceFlag = document.getElementById('hex-isresource').checked;
+  const oldWorkSite = (state.hexes[activeHexKey] && state.hexes[activeHexKey].workSite) || '';
+  if(workSite && workSite!==oldWorkSite){
+    const cost = WORK_SITE_TERRAIN_RP_COST[terrain]||0;
+    if(state.rp < cost){
+      alert(`Establishing a ${workSite} here costs ${cost} RP (${terrain||'no terrain set'}) — you only have ${state.rp} RP. Nothing was saved.`);
+      return;
+    }
+    state.rp -= cost;
+  }
+  if(!name && !type && !note && !resources && !features && !terrain && !workSite && !resourceFlag){
     delete state.hexes[activeHexKey];
   } else {
-    state.hexes[activeHexKey] = {name,type,note,resources,features,terrain,workSite};
+    state.hexes[activeHexKey] = {name,type,note,resources,features,terrain,workSite,resourceFlag};
   }
   scheduleSave();
   updateHexMarkers();
@@ -1995,7 +2498,7 @@ function renderNotesTab(){
   const typeOrder = Object.keys(HEX_TYPE_SYMBOLS);
   const entries = Object.keys(state.hexes)
     .map(key=>{ const [col,row] = key.split('_').map(Number); return {key, col, row, ...state.hexes[key]}; })
-    .filter(e=>e.name || e.type || e.note || e.resources || e.features || e.terrain || e.workSite)
+    .filter(e=>e.name || e.type || e.note || e.resources || e.features || e.terrain || e.workSite || e.resourceFlag)
     .sort((a,b)=>{
       const ta = typeOrder.indexOf(a.type), tb = typeOrder.indexOf(b.type);
       if(ta !== tb) return (ta===-1?999:ta) - (tb===-1?999:tb);
@@ -2007,7 +2510,7 @@ function renderNotesTab(){
   }
   list.innerHTML = entries.map(e=>{
     const symbol = e.type && HEX_TYPE_SYMBOLS[e.type] ? HEX_TYPE_SYMBOLS[e.type] : '·';
-    const tags = [e.terrain ? 'Terrain: '+e.terrain : '', e.workSite ? 'Work Site: '+e.workSite : '', e.resources ? 'Resources: '+e.resources : '', e.features ? 'Features: '+e.features : ''].filter(Boolean).join(' · ');
+    const tags = [e.terrain ? 'Terrain: '+e.terrain : '', e.workSite ? 'Work Site: '+e.workSite+(e.resourceFlag?' (Resource hex)':'') : '', e.resources ? 'Resources: '+e.resources : '', e.features ? 'Features: '+e.features : ''].filter(Boolean).join(' · ');
     return `<button class="note-item" onclick="jumpToHex(${e.col},${e.row})">
       <span class="note-dot">${symbol}</span>
       <span class="note-body">

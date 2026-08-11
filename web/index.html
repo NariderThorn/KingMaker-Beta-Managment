@@ -137,16 +137,43 @@
         </select>
       </div>
       <div class="row">
-        <div class="label">Work Site</div>
-        <select id="hex-worksite"></select>
+        <div class="label">Resource Hex</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <input type="checkbox" id="hex-isresource"> doubles a matching Work Site's yield
+        </label>
       </div>
+      <div class="hint" style="margin-top:0;">Work Site — GM's call; costs RP to establish, per Establish Work Site (Engineering, untrained, basic check vs. Control DC).</div>
+      <input type="hidden" id="hex-worksite">
+      <div id="hex-worksite-options" style="margin-bottom:6px;"></div>
       <div class="row">
         <div class="label">Resources</div>
-        <input type="text" id="hex-resources" class="wide" style="max-width:190px;" placeholder="e.g. Timber, Game">
+        <select id="hex-resources-select" onchange="toggleHexCustomField('resources')">
+          <option value="">— none —</option>
+          <option value="Furs">Furs</option>
+          <option value="Game">Game</option>
+          <option value="Herbs">Herbs</option>
+          <option value="Gems">Gems</option>
+          <option value="__custom__">Custom…</option>
+        </select>
+      </div>
+      <div class="row" id="hex-resources-custom-row" style="display:none;">
+        <div class="label">Custom Resources</div>
+        <input type="text" id="hex-resources-custom" class="wide" style="max-width:190px;" placeholder="Describe it">
       </div>
       <div class="row">
         <div class="label">Features</div>
-        <input type="text" id="hex-features" class="wide" style="max-width:190px;" placeholder="e.g. Ravine, Ruins">
+        <select id="hex-features-select" onchange="toggleHexCustomField('features')">
+          <option value="">— none —</option>
+          <option value="Ravine">Ravine</option>
+          <option value="Ruins">Ruins</option>
+          <option value="Cave">Cave</option>
+          <option value="Sacred Site">Sacred Site</option>
+          <option value="__custom__">Custom…</option>
+        </select>
+      </div>
+      <div class="row" id="hex-features-custom-row" style="display:none;">
+        <div class="label">Custom Features</div>
+        <input type="text" id="hex-features-custom" class="wide" style="max-width:190px;" placeholder="Describe it">
       </div>
       <textarea class="wide" id="hex-note" rows="3" placeholder="Notes about this hex..." style="margin-top:8px;"></textarea>
       <button class="action" onclick="saveHex()">Save hex</button>
