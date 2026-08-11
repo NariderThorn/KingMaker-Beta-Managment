@@ -3262,8 +3262,501 @@ function renderWarfareTab(){
 }
 // War encounter setup/round engine — see openStartWarEncounterPicker below (built out
 // alongside the rest of the battle resolver).
-function renderWarEncounterCard(){ return '<div class="hint" style="margin-top:0;">Loading…</div>'; }
-function openStartWarEncounterPicker(){ alert('Battle setup not wired up yet.'); }
+/* =====================================================================
+   WAR ENCOUNTER RESOLVER — round structure per Rules.aspx?ID=1864: roll
+   initiative, play a round (3 actions each, in initiative order), check
+   for routs, next round, repeat until one side is fully routed/defeated,
+   then resolve aftermath with a basic Warfare check. Combatants can be
+   real armies (state.armies) or ad-hoc enemy stat blocks the GM enters
+   for the encounter only — enemy forces aren't a persistent system here,
+   the app's job is resolving the mechanical fight once both sides' stats
+   are known, same as a GM would improvise them at the table.
+===================================================================== */
+function hexNeighbors(col,row){
+  const evenRow = row%2===0;
+  const d = evenRow ? [-1,0] : [0,1];
+  return [[col-1,row],[col+1,row],[col+d[0],row-1],[col+d[1],row-1],[col+d[0],row+1],[col+d[1],row+1]];
+}
+function letterToCol(str){
+  let n = 0;
+  for(let i=0;i<str.length;i++) n = n*26 + (str.charCodeAt(i)-64);
+  return n-1;
+}
+function parseHexLabel(label){
+  const m = /^([A-Za-z]+)(\d+)$/.exec((label||'').trim());
+  if(!m) return null;
+  return {col: letterToCol(m[1].toUpperCase()), row: parseInt(m[2],10)-1};
+}
+function defaultEnemyCombatant(name, stats){
+  return {id:newId(), name, ac:stats.ac, maneuver:stats.maneuver, morale:stats.morale, attack:stats.attack,
+    scouting:stats.scouting, attackKind:stats.attackKind, maxHp:stats.maxHp, hp:stats.maxHp, rt:stats.rt,
+    conditions: defaultArmyConditions(), tactics:[], rangedShotsUsed:0};
+}
+// Unified read for either a real army or an ad-hoc enemy combatant, with condition
+// modifiers folded in — the single source of truth the whole battle engine reads from.
+function encounterCombatantStats(c){
+  let base, name, tactics, maxHp, rt, conditions, hp, rangedShotsUsed;
+  if(c.ref==='army'){
+    const army = state.armies.find(a=>a.id===c.armyId);
+    const s = armyStatsAtLevel(army.type, state.level);
+    base = {ac:s.ac+armyGearAcBonus(army), maneuver:s.maneuver, morale:s.morale, attack:s.attack+armyGearAttackBonus(army), scouting:s.scouting, attackKind:s.attackKind};
+    name = army.name; tactics = army.tactics; maxHp = armyEffectiveMaxHp(army); rt = armyEffectiveRoutThreshold(army);
+    conditions = army.conditions; hp = army.hp; rangedShotsUsed = army.rangedShotsUsed||0;
+  } else {
+    const e = c.enemy;
+    base = {ac:e.ac, maneuver:e.maneuver, morale:e.morale, attack:e.attack, scouting:e.scouting, attackKind:e.attackKind};
+    name = e.name; tactics = e.tactics||[]; maxHp = e.maxHp; rt = e.rt; conditions = e.conditions; hp = e.hp; rangedShotsUsed = e.rangedShotsUsed||0;
+  }
+  const weary = conditions.weary||0, mired = conditions.mired||0, shaken = conditions.shaken||0;
+  const ac = base.ac - weary - mired - (conditions.outflanked?2:0) + (conditions.fortified?4:0) + (conditions.guarding?2:0);
+  const maneuver = base.maneuver - weary - mired;
+  const morale = base.morale - shaken - (conditions.routed?2:0) + (conditions.fortified?4:0);
+  return {name, ac, maneuver, morale, attack:base.attack, scouting:base.scouting, attackKind:base.attackKind,
+    maxHp, rt, hp, conditions, tactics, rangedShotsUsed};
+}
+function encounterApplyDamage(c, amt){
+  if(!amt) return;
+  if(c.ref==='army'){
+    const army = state.armies.find(a=>a.id===c.armyId);
+    army.hp = Math.max(0, army.hp-amt);
+    if(army.hp<=0) army.conditions.defeated = true;
+  } else {
+    c.enemy.hp = Math.max(0, c.enemy.hp-amt);
+    if(c.enemy.hp<=0) c.enemy.conditions.defeated = true;
+  }
+}
+function encounterHeal(c, amt){
+  if(!amt) return;
+  if(c.ref==='army'){
+    const army = state.armies.find(a=>a.id===c.armyId);
+    army.hp = Math.min(armyEffectiveMaxHp(army), army.hp+amt);
+    if(army.hp>0) army.conditions.defeated = false;
+  } else {
+    c.enemy.hp = Math.min(c.enemy.maxHp, c.enemy.hp+amt);
+    if(c.enemy.hp>0) c.enemy.conditions.defeated = false;
+  }
+}
+function encounterApplyCondition(c, condObj){
+  const conditions = c.ref==='army' ? state.armies.find(a=>a.id===c.armyId).conditions : c.enemy.conditions;
+  Object.entries(condObj).forEach(([k,v])=>{
+    if(typeof v==='boolean') conditions[k] = v;
+    else if(typeof v==='number') conditions[k] = Math.max(0, (conditions[k]||0)+v);
+  });
+}
+function encounterIncRangedShots(c){
+  if(c.ref==='army'){ const a = state.armies.find(x=>x.id===c.armyId); a.rangedShotsUsed = (a.rangedShotsUsed||0)+1; }
+  else c.enemy.rangedShotsUsed = (c.enemy.rangedShotsUsed||0)+1;
+}
+function encounterModifier(checkType){
+  const enc = state.warEncounter;
+  let mod = 0;
+  if(checkType==='maneuver' && enc.difficultTerrain) mod -= 2;
+  if(checkType==='ranged' && enc.wind==='strong') mod -= 1;
+  if(checkType==='ranged' && enc.wind==='storm') mod -= 2;
+  if(checkType==='scouting' && enc.darkness) mod -= 4;
+  return mod;
+}
+function actionCheckBonus(stats, checkType){
+  if(checkType==='melee'||checkType==='ranged'||checkType==='attack') return stats.attack;
+  if(checkType==='maneuver') return stats.maneuver;
+  if(checkType==='morale') return stats.morale;
+  if(checkType==='scouting') return stats.scouting;
+  return 0;
+}
+function actionTargetDC(action, targetStats){
+  if(action.vs==='ac' || action.vs==='fortAC') return targetStats.ac;
+  if(action.vs==='maneuver') return targetStats.maneuver;
+  if(action.vs==='morale') return targetStats.morale;
+  if(action.vs==='flat') return action.dc;
+  return 10;
+}
+const WAR_ACTION_TARGET_SIDE = {
+  'Advance':'enemy','Battle':'enemy','Disengage':'enemy','Guard':'self','Rally':'self','Retreat':'none',
+  'All-Out Assault':'enemy','Battlefield Medicine':'ally','Counterattack':'enemy','Covering Fire':'enemy',
+  'Defensive Stance':'ally','Dirty Fighting':'enemy','False Retreat':'enemy','Feint':'enemy','Outflank':'enemy',
+  'Overwhelming Bombardment':'enemy','Taunt':'enemy'
+};
+
+/* ---- setup ---- */
+function openStartWarEncounterPicker(){
+  const hexesWithArmies = [...new Set(state.armies.filter(a=>a.col!==undefined).map(a=>hexKey(a.col,a.row)))];
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>Start War Encounter</h3>
+    <div class="hint" style="margin-top:0;">Pick the hex where the battle happens. Your armies on that hex or adjacent to it join as Side A automatically.</div>
+    ${hexesWithArmies.length ? hexesWithArmies.map(k=>{
+      const [col,row] = k.split('_').map(Number);
+      return `<button type="button" class="option-card" onclick="closeWarfareOverlay();beginWarEncounterSetup('${k}')">
+        <div class="opt-name">${hexLabel(col,row)}</div>
+        <div class="opt-detail">${escapeHtml(state.armies.filter(a=>a.col===col&&a.row===row).map(a=>a.name).join(', '))}</div>
+      </button>`;
+    }).join('') : '<div class="hint" style="margin-top:0;">No armies are deployed yet — deploy one first, or start at any hex below anyway.</div>'}
+    <div class="hint" style="margin:10px 0 4px;">Or type a hex label (e.g. C5):</div>
+    <input type="text" class="wide" id="war-hex-input" placeholder="e.g. C5">
+    <button class="ghost" style="margin-top:6px;" onclick="const v=document.getElementById('war-hex-input').value.trim(); const p=parseHexLabel(v); if(p){closeWarfareOverlay();beginWarEncounterSetup(hexKey(p.col,p.row));} else alert('Type a hex label like C5.');">Use this hex</button>
+    <button class="ghost" style="margin-top:8px;" onclick="closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function beginWarEncounterSetup(hexKeyStr){
+  const [col,row] = hexKeyStr.split('_').map(Number);
+  const relevantKeys = [hexKeyStr, ...hexNeighbors(col,row).map(([c,r])=>hexKey(c,r))];
+  const sideAArmies = state.armies.filter(a=>a.col!==undefined && relevantKeys.includes(hexKey(a.col,a.row)));
+  state.warEncounter = {
+    hexKey: hexKeyStr, round: 1, phase: 'setup',
+    combatants: sideAArmies.map(a=>({side:'A', ref:'army', armyId:a.id, initiative:null, actionsLeft:3})),
+    turnIndex: -1, difficultTerrain:false, wind:'none', darkness:false, log: [], winner: null
+  };
+  scheduleSave();
+  renderWarfareTab();
+}
+function addEnemyCombatantPreset(type){
+  const row = armyStatsAtLevel(type, state.level);
+  const s = {ac:row.ac, maneuver:row.maneuver, morale:row.morale, attack:row.attack, scouting:row.scouting, attackKind:row.attackKind, maxHp:row.baseHp, rt:row.baseRt};
+  const n = state.warEncounter.combatants.filter(c=>c.ref==='enemy').length+1;
+  state.warEncounter.combatants.push({side:'B', ref:'enemy', enemy: defaultEnemyCombatant(`Enemy ${type} ${n}`, s), initiative:null, actionsLeft:3});
+  scheduleSave(); renderWarfareTab();
+}
+function addEnemyCombatantCustom(){
+  const name = document.getElementById('enemy-custom-name').value.trim() || 'Enemy force';
+  const num = id => parseInt(document.getElementById(id).value,10)||0;
+  const stats = {ac:num('enemy-custom-ac'), maneuver:num('enemy-custom-maneuver'), morale:num('enemy-custom-morale'),
+    attack:num('enemy-custom-attack'), scouting:num('enemy-custom-scouting'), attackKind:document.getElementById('enemy-custom-kind').value,
+    maxHp:Math.max(1,num('enemy-custom-hp')), rt:Math.max(1,Math.floor(Math.max(1,num('enemy-custom-hp'))/2))};
+  state.warEncounter.combatants.push({side:'B', ref:'enemy', enemy: defaultEnemyCombatant(name, stats), initiative:null, actionsLeft:3});
+  scheduleSave(); renderWarfareTab();
+}
+function removeEncounterCombatant(idx){
+  state.warEncounter.combatants.splice(idx,1);
+  scheduleSave(); renderWarfareTab();
+}
+function setEncounterFlag(field, value){
+  state.warEncounter[field] = value;
+  scheduleSave();
+}
+function startWarEncounterInitiative(){
+  if(!state.warEncounter.combatants.some(c=>c.side==='A') || !state.warEncounter.combatants.some(c=>c.side==='B')){
+    alert('Add at least one combatant to each side first.');
+    return;
+  }
+  state.warEncounter.phase = 'initiative';
+  scheduleSave();
+  renderWarfareTab();
+}
+function confirmWarEncounterInitiative(){
+  const combatants = state.warEncounter.combatants;
+  combatants.forEach((c,i)=>{
+    const roll = parseInt(document.getElementById(`init-roll-${i}`).value,10)||0;
+    const s = encounterCombatantStats(c);
+    c.initiative = roll + s.scouting + encounterModifier('scouting');
+    c._tiebreak = s.scouting;
+  });
+  combatants.sort((a,b)=> b.initiative-a.initiative || b._tiebreak-a._tiebreak);
+  combatants.forEach(c=>c.actionsLeft=3);
+  state.warEncounter.phase = 'round';
+  state.warEncounter.turnIndex = 0;
+  state.warEncounter.log.unshift(`Round 1 begins. Initiative: ${combatants.map(c=>`${encounterCombatantStats(c).name} (${c.initiative})`).join(', ')}.`);
+  scheduleSave();
+  renderWarfareTab();
+}
+function cancelWarEncounter(){
+  if(!confirm("Cancel this war encounter? Damage and conditions already applied will stick, but the battle stops here.")) return;
+  state.warEncounter = null;
+  scheduleSave();
+  renderWarfareTab();
+}
+
+/* ---- round loop ---- */
+let pendingWarAction = null; // {actionName, targetIndex}
+function openWarActionPicker(){
+  const enc = state.warEncounter;
+  const actor = enc.combatants[enc.turnIndex];
+  const stats = encounterCombatantStats(actor);
+  const names = warActionsAvailableTo({tactics:stats.tactics}).filter(n=>{
+    const a = WAR_ACTIONS[n];
+    if(a.check==='ranged' && stats.rangedShotsUsed>=5) return false;
+    return a.reaction || a.cost<=actor.actionsLeft;
+  });
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>${escapeHtml(stats.name)}'s turn</h3>
+    <div class="hint" style="margin-top:0;">${actor.actionsLeft} action${actor.actionsLeft===1?'':'s'} left this turn.</div>
+    <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
+      ${names.map(n=>{
+        const a = WAR_ACTIONS[n];
+        return `<button type="button" class="option-card" onclick="closeWarfareOverlay();chooseWarAction('${escapeAttr(n)}')">
+          <div class="opt-name">${escapeHtml(n)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${a.reaction?'reaction':a.cost+' action'+(a.cost>1?'s':'')})</span></div>
+          <div class="opt-detail">${escapeHtml(a.text)}</div>
+        </button>`;
+      }).join('')}
+    </div>
+    <button class="ghost" style="margin-top:8px;" onclick="closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function chooseWarAction(name){
+  pendingWarAction = {actionName:name, targetIndex:null};
+  const side = WAR_ACTION_TARGET_SIDE[name];
+  if(side==='none' || side==='self') openWarActionRollInput();
+  else openWarActionTargetPicker(side);
+}
+function openWarActionTargetPicker(side){
+  const enc = state.warEncounter;
+  const actor = enc.combatants[enc.turnIndex];
+  const pool = enc.combatants.map((c,i)=>({c,i})).filter(({c,i})=> i!==enc.turnIndex && (side==='ally' ? c.side===actor.side : c.side!==actor.side) && !encounterCombatantStats(c).conditions.defeated);
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:400px;width:100%;margin:0;">
+    <h3>Choose a target</h3>
+    ${pool.length ? pool.map(({c,i})=>{
+      const s = encounterCombatantStats(c);
+      return `<button type="button" class="option-card" onclick="closeWarfareOverlay();pendingWarAction.targetIndex=${i};openWarActionRollInput();">
+        <div class="opt-name">${escapeHtml(s.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(HP ${s.hp}/${s.maxHp}, AC ${s.ac})</span></div>
+      </button>`;
+    }).join('') : '<div class="hint" style="margin-top:0;">No valid targets.</div>'}
+    <button class="ghost" style="margin-top:8px;" onclick="pendingWarAction=null;closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function openWarActionRollInput(){
+  const enc = state.warEncounter;
+  const actor = enc.combatants[enc.turnIndex];
+  const actorStats = encounterCombatantStats(actor);
+  const action = WAR_ACTIONS[pendingWarAction.actionName];
+  const targetC = pendingWarAction.targetIndex!=null ? enc.combatants[pendingWarAction.targetIndex] : null;
+  const targetStats = targetC ? encounterCombatantStats(targetC) : null;
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  if(action.check==='none'){
+    overlay.innerHTML = `<div class="card" style="max-width:360px;width:100%;margin:0;">
+      <h3>${escapeHtml(pendingWarAction.actionName)}</h3>
+      <div class="hint" style="margin-top:0;">No check needed.</div>
+      <button class="action" onclick="closeWarfareOverlay();confirmWarActionRoll(3)">Confirm</button>
+    </div>`;
+  } else {
+    const bonus = actionCheckBonus(actorStats, action.check) + encounterModifier(action.check);
+    const dc = action.vs==='none' ? null : actionTargetDC(action, targetStats||actorStats);
+    overlay.innerHTML = `<div class="card" style="max-width:360px;width:100%;margin:0;">
+      <h3>${escapeHtml(pendingWarAction.actionName)}</h3>
+      <div class="hint" style="margin-top:0;">${escapeHtml(actorStats.name)}'s bonus: ${fmt(bonus)}${dc!=null?`, vs. DC ${dc}`:''}. Roll a d20 and enter it:</div>
+      <input class="num" type="number" min="1" max="20" id="war-action-roll" placeholder="d20 result">
+      <button class="action" style="margin-top:8px;" onclick="const v=parseInt(document.getElementById('war-action-roll').value,10); if(!v||v<1||v>20){alert('Enter the d20 result (1-20).');return;} closeWarfareOverlay();confirmWarActionRoll(degreeOfSuccess(v,${bonus},${dc}));">Resolve</button>
+    </div>`;
+  }
+  document.body.appendChild(overlay);
+}
+function confirmWarActionRoll(degree){
+  const enc = state.warEncounter;
+  const actor = enc.combatants[enc.turnIndex];
+  const action = WAR_ACTIONS[pendingWarAction.actionName];
+  const targetC = pendingWarAction.targetIndex!=null ? enc.combatants[pendingWarAction.targetIndex] : null;
+  const outcome = action.outcomes[degree];
+  const actorStats = encounterCombatantStats(actor);
+  if(action.check==='ranged') encounterIncRangedShots(actor);
+  if(outcome.dmg && targetC) encounterApplyDamage(targetC, outcome.dmg);
+  if(outcome.healAlly && targetC) encounterHeal(targetC, outcome.healAlly);
+  if(outcome.selfCond) encounterApplyCondition(actor, outcome.selfCond);
+  if(outcome.targetCond && targetC) encounterApplyCondition(targetC, outcome.targetCond);
+  if(outcome.allyCond && targetC) encounterApplyCondition(targetC, outcome.allyCond);
+  const targetName = targetC ? encounterCombatantStats(targetC).name : null;
+  enc.log.unshift(`${actorStats.name} used ${pendingWarAction.actionName}${targetName?' on '+targetName:''}: ${DEGREE_LABEL[degree]} — ${outcome.text}`);
+  if(!action.reaction) actor.actionsLeft = Math.max(0, actor.actionsLeft - action.cost);
+  pendingWarAction = null;
+  scheduleSave();
+  if(!checkWarEncounterEnded()){ render(); renderWarfareTab(); }
+}
+function endWarEncounterTurn(){
+  const enc = state.warEncounter;
+  if(checkWarEncounterEnded()) return;
+  const nextIndex = enc.turnIndex+1;
+  if(nextIndex>=enc.combatants.length){ beginRoutCheckPhase(); return; }
+  enc.turnIndex = nextIndex;
+  enc.combatants[nextIndex].actionsLeft = 3;
+  scheduleSave();
+  renderWarfareTab();
+}
+
+/* ---- check for routs (between rounds) ---- */
+let routCheckQueue = [];
+function beginRoutCheckPhase(){
+  const enc = state.warEncounter;
+  enc.phase = 'routCheck';
+  routCheckQueue = [];
+  enc.combatants.forEach((c,i)=>{
+    const s = encounterCombatantStats(c);
+    if(!s.conditions.defeated && !s.conditions.routed && s.hp<=s.rt) routCheckQueue.push(i);
+  });
+  scheduleSave();
+  if(checkWarEncounterEnded()) return;
+  renderWarfareTab();
+}
+function highestEnemyMorale(combatantIndex){
+  const enc = state.warEncounter;
+  const c = enc.combatants[combatantIndex];
+  const enemies = enc.combatants.filter(x=>x.side!==c.side && !encounterCombatantStats(x).conditions.defeated);
+  if(!enemies.length) return 10;
+  return Math.max(...enemies.map(x=>encounterCombatantStats(x).morale));
+}
+function resolveRoutCheck(roll){
+  const enc = state.warEncounter;
+  const idx = routCheckQueue.shift();
+  const c = enc.combatants[idx];
+  const stats = encounterCombatantStats(c);
+  const dc = highestEnemyMorale(idx);
+  const degree = degreeOfSuccess(roll, stats.morale, dc);
+  if(degree===1) encounterApplyCondition(c, {shaken:1});
+  else if(degree===0) encounterApplyCondition(c, {routed:true});
+  enc.log.unshift(`${stats.name} Morale check (DC ${dc}): ${DEGREE_LABEL[degree]}.`);
+  scheduleSave();
+  if(checkWarEncounterEnded()) return;
+  renderWarfareTab();
+}
+function finishRoutCheckPhase(){
+  const enc = state.warEncounter;
+  if(checkWarEncounterEnded()) return;
+  enc.round += 1;
+  enc.turnIndex = 0;
+  enc.combatants.forEach(c=>c.actionsLeft=3);
+  enc.phase = 'round';
+  enc.log.unshift(`Round ${enc.round} begins.`);
+  scheduleSave();
+  renderWarfareTab();
+}
+
+/* ---- end + aftermath ---- */
+function checkWarEncounterEnded(){
+  const enc = state.warEncounter;
+  if(!enc || enc.phase==='ended') return enc && enc.phase==='ended';
+  const alive = side => enc.combatants.some(c=>c.side===side && !encounterCombatantStats(c).conditions.defeated && !encounterCombatantStats(c).conditions.routed);
+  const aAlive = alive('A'), bAlive = alive('B');
+  if(!aAlive || !bAlive){
+    enc.phase = 'ended';
+    enc.winner = (!aAlive && !bAlive) ? 'draw' : (aAlive ? 'A' : 'B');
+    enc.log.unshift(`Battle over — ${enc.winner==='draw' ? 'both sides routed or defeated' : 'Side '+enc.winner+' wins'}.`);
+    scheduleSave();
+    render();
+    renderWarfareTab();
+    return true;
+  }
+  return false;
+}
+function resolveWarEncounterAftermath(degree){
+  const enc = state.warEncounter;
+  const [col,row] = enc.hexKey.split('_').map(Number);
+  const damagedArmies = enc.combatants.filter(c=>c.ref==='army').map(c=>state.armies.find(a=>a.id===c.armyId)).filter(a=>a && a.hp<armyEffectiveMaxHp(a));
+  let note = `Warfare — War encounter at ${hexLabel(col,row)} ended (${enc.winner==='draw'?'draw':'Side '+enc.winner+' wins'}). Aftermath: ${DEGREE_LABEL[degree]}.`;
+  if(degree>=2){ damagedArmies.forEach(a=>{ a.hp = Math.min(armyEffectiveMaxHp(a), a.hp+1); }); note += ' Restored 1 HP to each damaged army.'; }
+  if(degree===3){ state.fame = Math.min(state.fameMax, state.fame+1); state.unrest = Math.max(0, state.unrest-1); note += ` +1 ${state.fameType}, Unrest −1.`; }
+  if(degree===0){ damagedArmies.forEach(a=>{ a.conditions.weary += 1; }); note += ' Damaged armies gain weary +1.'; }
+  state.log.unshift({turn:state.turn, note});
+  state.warEncounter = null;
+  scheduleSave();
+  render();
+  renderWarfareTab();
+}
+
+/* ---- render ---- */
+function renderCombatantMiniStat(c, idx){
+  const s = encounterCombatantStats(c);
+  const isTurn = state.warEncounter.phase==='round' && state.warEncounter.turnIndex===idx;
+  return `<div class="row" style="${isTurn?'border-left:3px solid var(--gold);padding-left:6px;':''}">
+    <div class="label">${escapeHtml(s.name)} <small>Side ${c.side} · HP ${s.hp}/${s.maxHp} (RT ${s.rt}) · AC ${s.ac}</small></div>
+    <div style="font-size:11px;color:var(--text-muted);text-align:right;">${[s.conditions.shaken?'Shaken '+s.conditions.shaken:'', s.conditions.weary?'Weary '+s.conditions.weary:'', s.conditions.outflanked?'Outflanked':'', s.conditions.routed?'Routed':'', s.conditions.defeated?'Defeated':''].filter(Boolean).join(', ')||'—'}</div>
+  </div>`;
+}
+function renderWarEncounterCard(){
+  const enc = state.warEncounter;
+  const [col,row] = enc.hexKey.split('_').map(Number);
+  if(enc.phase==='setup'){
+    return `
+      <div class="hint" style="margin-top:0;">Battle at ${hexLabel(col,row)}.</div>
+      <div class="hint" style="margin:8px 0 4px;">Side A (yours)</div>
+      ${enc.combatants.filter(c=>c.side==='A').length ? enc.combatants.map((c,i)=>c.side==='A'?renderCombatantMiniStat(c,i):'').join('') : '<div class="hint" style="margin-top:0;">No armies here.</div>'}
+      <div class="hint" style="margin:8px 0 4px;">Side B (enemy)</div>
+      ${enc.combatants.map((c,i)=>c.side==='B'?`<div style="display:flex;align-items:center;gap:6px;">${renderCombatantMiniStat(c,i)}<button class="loc-link" style="color:var(--rust);" onclick="removeEncounterCombatant(${i})">remove</button></div>`:'').join('') || '<div class="hint" style="margin-top:0;">Add at least one enemy.</div>'}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        ${Object.keys(ARMY_TYPES).map(t=>`<button class="small-ghost" onclick="addEnemyCombatantPreset('${t}')">+ ${t}</button>`).join('')}
+      </div>
+      <div class="hint" style="margin:10px 0 4px;">Or a custom enemy:</div>
+      <input type="text" class="wide" id="enemy-custom-name" placeholder="Name">
+      <div class="two-col" style="margin-top:6px;">
+        <div><div class="hint" style="margin-top:0;">AC</div><input class="num" type="number" id="enemy-custom-ac" value="15"></div>
+        <div><div class="hint" style="margin-top:0;">HP</div><input class="num" type="number" id="enemy-custom-hp" value="4"></div>
+      </div>
+      <div class="two-col" style="margin-top:6px;">
+        <div><div class="hint" style="margin-top:0;">Maneuver</div><input class="num" type="number" id="enemy-custom-maneuver" value="4"></div>
+        <div><div class="hint" style="margin-top:0;">Morale</div><input class="num" type="number" id="enemy-custom-morale" value="10"></div>
+      </div>
+      <div class="two-col" style="margin-top:6px;">
+        <div><div class="hint" style="margin-top:0;">Attack</div><input class="num" type="number" id="enemy-custom-attack" value="9"></div>
+        <div><div class="hint" style="margin-top:0;">Scouting</div><input class="num" type="number" id="enemy-custom-scouting" value="7"></div>
+      </div>
+      <div class="hint" style="margin-top:0;">Attack kind</div>
+      <select id="enemy-custom-kind"><option value="melee">Melee</option><option value="ranged">Ranged</option></select>
+      <button class="ghost" style="margin-top:8px;" onclick="addEnemyCombatantCustom()">+ Add custom enemy</button>
+      <div class="hint" style="margin:10px 0 4px;">Terrain &amp; weather</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;"><input type="checkbox" onchange="setEncounterFlag('difficultTerrain',this.checked)"> Difficult terrain (−2 Maneuver)</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px;"><input type="checkbox" onchange="setEncounterFlag('darkness',this.checked)"> Darkness / heavy fog (−4 Scouting)</label>
+      <select style="margin-top:6px;" onchange="setEncounterFlag('wind',this.value)">
+        <option value="none">No wind</option><option value="strong">Strong wind (−1 ranged)</option><option value="storm">Windstorm (−2 ranged)</option>
+      </select>
+      <button class="action" style="margin-top:10px;" onclick="startWarEncounterInitiative()">Roll Initiative</button>
+      <button class="ghost" style="margin-top:8px;" onclick="cancelWarEncounter()">Cancel Encounter</button>`;
+  }
+  if(enc.phase==='initiative'){
+    return `
+      <div class="hint" style="margin-top:0;">Each combatant rolls a Scouting check (d20 + Scouting) for initiative.</div>
+      ${enc.combatants.map((c,i)=>{
+        const s = encounterCombatantStats(c);
+        return `<div class="row"><div class="label">${escapeHtml(s.name)}<small>Scouting ${fmt(s.scouting)}</small></div><input class="num" type="number" id="init-roll-${i}" placeholder="d20"></div>`;
+      }).join('')}
+      <button class="action" style="margin-top:8px;" onclick="confirmWarEncounterInitiative()">Confirm Initiative</button>
+      <button class="ghost" style="margin-top:8px;" onclick="cancelWarEncounter()">Cancel Encounter</button>`;
+  }
+  if(enc.phase==='round'){
+    const actor = enc.combatants[enc.turnIndex];
+    const actorStats = encounterCombatantStats(actor);
+    return `
+      <div class="hint" style="margin-top:0;">Round ${enc.round} · ${escapeHtml(actorStats.name)}'s turn (${actor.actionsLeft} action${actor.actionsLeft===1?'':'s'} left)</div>
+      ${enc.combatants.map((c,i)=>renderCombatantMiniStat(c,i)).join('')}
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+        <button class="action" style="width:auto;flex:1;" onclick="openWarActionPicker()">Take War Action</button>
+        <button class="ghost" style="width:auto;flex:1;" onclick="endWarEncounterTurn()">End Turn</button>
+      </div>
+      <button class="ghost" style="margin-top:8px;" onclick="cancelWarEncounter()">Cancel Encounter</button>
+      ${enc.log.length ? `<div class="divider"></div><div class="hint" style="margin-top:0;">Battle log</div>${enc.log.slice(0,10).map(l=>`<div class="hint" style="margin-top:4px;">${escapeHtml(l)}</div>`).join('')}` : ''}`;
+  }
+  if(enc.phase==='routCheck'){
+    if(!routCheckQueue.length){
+      return `<div class="hint" style="margin-top:0;">All Morale checks resolved.</div><button class="action" onclick="finishRoutCheckPhase()">Start Round ${enc.round+1}</button>`;
+    }
+    const idx = routCheckQueue[0];
+    const c = enc.combatants[idx];
+    const s = encounterCombatantStats(c);
+    const dc = highestEnemyMorale(idx);
+    return `
+      <div class="hint" style="margin-top:0;">${escapeHtml(s.name)} is at or below its Rout Threshold (HP ${s.hp}/${s.maxHp}, RT ${s.rt}) — Morale check vs. DC ${dc} (highest enemy Morale).</div>
+      <div class="hint" style="margin-top:0;">Morale bonus: ${fmt(s.morale)}.</div>
+      <input class="num" type="number" min="1" max="20" id="rout-check-roll" placeholder="d20 result">
+      <button class="action" style="margin-top:8px;" onclick="const v=parseInt(document.getElementById('rout-check-roll').value,10); if(!v||v<1||v>20){alert('Enter the d20 result (1-20).');return;} resolveRoutCheck(v);">Resolve</button>`;
+  }
+  if(enc.phase==='ended'){
+    return `
+      <div class="hint" style="margin-top:0;">Battle over — ${enc.winner==='draw'?'both sides routed or defeated.':'Side '+enc.winner+' wins.'}</div>
+      <div class="hint" style="margin-top:0;">Resolve the aftermath with a basic Warfare check:</div>
+      <button class="action" onclick="openWarEncounterAftermathPicker()">Resolve Aftermath</button>`;
+  }
+  return '';
+}
+function openWarEncounterAftermathPicker(){
+  openDegreePicker('Resolve the battle aftermath (Warfare check)', d=>resolveWarEncounterAftermath(d));
+}
 
 /* =====================================================================
    BINDINGS
