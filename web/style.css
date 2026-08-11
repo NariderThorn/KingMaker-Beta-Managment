@@ -129,11 +129,11 @@
     z-index:10;
   }
   nav.bottom button{
-    flex:1;background:none;border:none;color:var(--text-muted);
-    font-family:'Inter',sans-serif;font-size:10px;letter-spacing:0.02em;
-    display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;cursor:pointer;border-radius:8px;
+    flex:1;min-width:0;background:none;border:none;color:var(--text-muted);
+    font-family:'Inter',sans-serif;font-size:9px;letter-spacing:0.01em;text-align:center;line-height:1.2;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 1px;cursor:pointer;border-radius:8px;
   }
-  nav.bottom button .icon{font-size:17px;}
+  nav.bottom button .icon{font-size:15px;}
   nav.bottom button.active{color:var(--gold);background:rgba(201,162,75,0.08);}
 
   .hint{font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5;}
@@ -154,6 +154,7 @@
     fill:#F2ECD8;stroke:#0A0D0E;stroke-width:2.5;paint-order:stroke fill;
     font-family:'Inter',sans-serif;font-weight:600;
   }
+  .hex-marker.army-marker{ font-size:20px; fill:var(--rust); }
   .legend{display:flex;flex-wrap:wrap;gap:8px 12px;margin-top:10px;}
   .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);}
   .legend-swatch{width:16px;text-align:center;display:inline-block;color:var(--gold);font-size:12px;}

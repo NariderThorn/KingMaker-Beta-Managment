@@ -341,6 +341,194 @@ function structureCategoryClass(def){
   return 'cat-gold';
 }
 
+/* =====================================================================
+   WARFARE (Beta) — Appendix 3 (2e.aonprd.com/Rules.aspx?ID=1845) and its
+   linked pages (Army Stat Block ID=1848, Recruiting an Army ID=1849,
+   Basic Armies KMWarArmies.aspx + the by-level table at ID=1858, Army
+   Tactics KMWarTactics.aspx, Army Activities/basic+tactical War Actions
+   KMWarActions.aspx, War Encounters ID=1864, Army Conditions ID=1878,
+   Army Gear ID=1861). Every number below is a bare game fact (level
+   thresholds, DCs, damage, RP costs) — safe to encode directly. Flavor
+   text (tactic/action descriptions) is paraphrased in our own words, same
+   split as KM_STRUCTURES/KINGDOM_FEATS.
+
+   Two things confirmed during research that are worth flagging:
+   - Recruit Army has NO up-front RP cost in the real rules — it only
+     raises Consumption (ongoing) once recruited. Outfit Army (buying
+     gear) is the one with a real RP cost, enforced the same way
+     Structures/Work Sites are.
+   - HP/Rout Threshold/Consumption are shown fixed per army type at their
+     minimum level, with no by-level column in the scaling table (unlike
+     Scouting/DC/AC/Saves/Attack, which all scale). Treated as constant
+     per type here — flag this if it turns out wrong against the book.
+===================================================================== */
+const ARMY_TYPES = {
+  Infantry:   {minLevel:1, maneuver:'low',  morale:'high', hp:4, rt:2, consumption:1, attackKind:'melee',
+    special:'No special rules beyond the basics.'},
+  Cavalry:    {minLevel:3, maneuver:'high', morale:'low',  hp:4, rt:2, consumption:2, attackKind:'melee',
+    special:'+1 status bonus on weapon attacks against Infantry/Skirmisher armies; −1 status penalty on Maneuver/Morale saves against area and mental effects.'},
+  Skirmisher: {minLevel:5, maneuver:'high', morale:'low',  hp:4, rt:2, consumption:1, attackKind:'melee', acAdjust:-2, savesAdjust:2,
+    special:'AC is 2 lower than the standard value for its level; Maneuver and Morale are both 2 higher than standard (already applied below).'},
+  Siege:      {minLevel:7, maneuver:'low',  morale:'high', hp:6, rt:3, consumption:1, attackKind:'ranged',
+    special:"Can't be outfitted with gear or attack engaged armies; can damage fortifications; ranged Strikes are limited to 5 per war encounter."}
+};
+// Standard values for basic armies by level (Rules.aspx?ID=1858) — Scouting, standard
+// DC (also Recruitment DC), AC, High save, Low save, Attack, Max Tactics. Index 0 = level 1.
+const ARMY_LEVEL_TABLE = [
+  {scouting:7,  dc:15, ac:16, high:10, low:4,  attack:9,  maxTactics:1},
+  {scouting:8,  dc:16, ac:18, high:11, low:5,  attack:11, maxTactics:1},
+  {scouting:9,  dc:18, ac:19, high:12, low:6,  attack:12, maxTactics:1},
+  {scouting:11, dc:19, ac:21, high:14, low:8,  attack:14, maxTactics:2},
+  {scouting:12, dc:20, ac:22, high:15, low:9,  attack:15, maxTactics:2},
+  {scouting:14, dc:22, ac:24, high:17, low:11, attack:17, maxTactics:2},
+  {scouting:15, dc:23, ac:25, high:18, low:12, attack:18, maxTactics:2},
+  {scouting:16, dc:24, ac:27, high:19, low:13, attack:20, maxTactics:3},
+  {scouting:18, dc:26, ac:28, high:21, low:15, attack:21, maxTactics:3},
+  {scouting:19, dc:27, ac:30, high:22, low:16, attack:23, maxTactics:3},
+  {scouting:21, dc:28, ac:31, high:24, low:18, attack:24, maxTactics:3},
+  {scouting:22, dc:30, ac:33, high:25, low:19, attack:26, maxTactics:4},
+  {scouting:23, dc:31, ac:34, high:26, low:20, attack:27, maxTactics:4},
+  {scouting:25, dc:32, ac:36, high:28, low:22, attack:29, maxTactics:4},
+  {scouting:26, dc:34, ac:37, high:29, low:23, attack:30, maxTactics:4},
+  {scouting:28, dc:35, ac:39, high:30, low:25, attack:32, maxTactics:5},
+  {scouting:29, dc:36, ac:40, high:32, low:26, attack:33, maxTactics:5},
+  {scouting:30, dc:38, ac:42, high:33, low:27, attack:35, maxTactics:5},
+  {scouting:32, dc:39, ac:43, high:35, low:29, attack:36, maxTactics:5},
+  {scouting:33, dc:40, ac:45, high:36, low:30, attack:38, maxTactics:6}
+];
+function armyToughenedBonus(army){
+  return (army.tactics||[]).filter(t=>t==='Toughened Soldiers').length; // stackable, +1 max HP each
+}
+function armyHoldTheLine(army){
+  return (army.tactics||[]).includes('Hold the Line');
+}
+function armyStatsAtLevel(type, level){
+  const def = ARMY_TYPES[type];
+  const lvl = Math.max(def.minLevel, Math.min(20, level||def.minLevel));
+  const row = ARMY_LEVEL_TABLE[lvl-1];
+  return {
+    level: lvl,
+    scouting: row.scouting,
+    recruitDC: row.dc,
+    ac: row.ac + (def.acAdjust||0),
+    maneuver: (def.maneuver==='high' ? row.high : row.low) + (def.savesAdjust||0),
+    morale: (def.morale==='high' ? row.high : row.low) + (def.savesAdjust||0),
+    attack: row.attack,
+    baseHp: def.hp,
+    baseRt: def.rt,
+    consumption: def.consumption,
+    maxTactics: row.maxTactics,
+    attackKind: def.attackKind
+  };
+}
+function armyEffectiveMaxHp(army){
+  const s = armyStatsAtLevel(army.type, army.level);
+  return s.baseHp + armyToughenedBonus(army);
+}
+function armyEffectiveRoutThreshold(army){
+  const maxHp = armyEffectiveMaxHp(army);
+  // Hold the Line changes Rout Threshold to 1/4 max HP instead of the usual 1/2
+  return armyHoldTheLine(army) ? Math.max(1, Math.floor(maxHp/4)) : Math.max(1, Math.floor(maxHp/2));
+}
+
+// Army Tactics (KMWarTactics.aspx) — 21 entries. `unlocks` names the War Action a
+// tactic grants access to, if any (used to gate the round-by-round action list).
+// Training DC isn't published as its own table on AoN's page text; approximated as
+// the Basic Armies standard DC for the tactic's level requirement, same spirit as
+// using kingdom level for "settlement level" elsewhere in this app — flag if wrong.
+const WAR_TACTICS = {
+  'Ambush':               {level:8,  types:['Skirmisher'], unlocks:null, effect:'On round 1, can engage enemies that rolled lower initiative even without moving adjacent first; +2 bonus on the first attack that round.'},
+  'Bloodied but Unbroken': {level:5, types:['Cavalry','Infantry','Skirmisher'], unlocks:null, effect:'+1 status bonus (+2 at level 10) to AC, Maneuver, Morale, and attacks while at or below the Rout Threshold.'},
+  'Cavalry Experts':      {level:6,  types:['Cavalry'], unlocks:null, effect:'Overrun-style maneuver bonus increases to +2; at level 12, ignores Overrun penalties entirely.'},
+  'Darkvision':           {level:1,  types:null, unlocks:null, effect:"Army's creatures see in darkness as if with darkvision."},
+  'Defensive Tactics':    {level:3,  types:null, unlocks:'Defensive Stance', effect:'+1 bonus (+2 at 9th, +3 at 17th) on Guard actions; grants access to the Defensive Stance action.'},
+  'Explosive Shot':       {level:11, types:['Siege'], unlocks:'Overwhelming Bombardment', effect:'Critical ranged hits deal 1 extra damage to a second, non-distant enemy; grants access to Overwhelming Bombardment.'},
+  'Field Triage':         {level:6,  types:['Infantry','Skirmisher'], unlocks:'Battlefield Medicine', effect:'Grants access to the Battlefield Medicine action.'},
+  'Flaming Shot':         {level:9,  types:null, unlocks:null, effect:'Successful ranged Strikes force a Maneuver check on the target; on a failure the Strike deals 1 extra damage.'},
+  'Flexible Tactics':     {level:5,  types:['Infantry','Skirmisher'], unlocks:'Dirty Fighting', effect:'Grants access to Dirty Fighting, False Retreat, and Feint, plus the Counterattack reaction.'},
+  'Focused Devotion':     {level:3,  types:null, unlocks:'Taunt', effect:'+1 bonus (+2 at 9th, +3 at 17th) on Rally actions; grants access to the Taunt action.'},
+  'Hold the Line':        {level:1,  types:null, unlocks:null, effect:"+1 bonus resisting routs; the army's Rout Threshold becomes 1/4 its maximum HP instead of 1/2."},
+  'Increased Ammunition':  {level:5, types:null, unlocks:null, effect:'+2 ranged Strikes available per war encounter; stacks if taken more than once.'},
+  'Keen Eyed':            {level:1,  types:null, unlocks:null, effect:'+2 bonus on initiative (Scouting) rolls.'},
+  'Keep up the Pressure': {level:3,  types:null, unlocks:null, effect:'Multiple-attack penalties are reduced to −4/−8 instead of the usual −5/−10.'},
+  'Live off the Land':    {level:1,  types:['Cavalry','Infantry','Skirmisher'], unlocks:null, effect:'Consumption is reduced by 1 while stationed in a wilderness hex with no settlement.'},
+  'Low-Light Vision':     {level:1,  types:null, unlocks:null, effect:"Army's creatures see in dim light as if it were bright light."},
+  'Merciless':            {level:5,  types:['Cavalry','Infantry'], unlocks:'All-Out Assault', effect:'+2 bonus to the DC enemies use to Disengage from this army; grants access to All-Out Assault.'},
+  'Opening Salvo':        {level:8,  types:['Cavalry','Siege','Skirmisher'], unlocks:null, effect:'The army can start a war encounter distant from the enemy on round 1 instead of adjacent.'},
+  'Reckless Flankers':    {level:5,  types:['Cavalry','Skirmisher'], unlocks:'Outflank', effect:'Can trade −2 AC for +1 attack bonus while engaged; grants access to the Outflank action.'},
+  'Sharpshooter':         {level:5,  types:['Cavalry','Infantry','Skirmisher'], unlocks:'Covering Fire', effect:'+1 bonus on ranged Strikes but −2 penalty on melee Strikes (−1 at 9th, none at 15th); grants access to Covering Fire.'},
+  'Toughened Soldiers':   {level:1,  types:null, unlocks:null, effect:'+1 maximum HP; stacks if taken more than once.'}
+};
+function tacticTrainingDC(name){
+  const t = WAR_TACTICS[name];
+  if(!t) return 15;
+  const row = ARMY_LEVEL_TABLE[Math.max(0, Math.min(19, t.level-1))];
+  return row.dc;
+}
+
+// War Actions (KMWarActions.aspx) — 6 Basic (always available) + 13 Tactical (need the
+// listed tactic trained first). `check` is what the acting army rolls (maneuver/morale/
+// melee/ranged — melee/ranged use the army's Attack bonus, maneuver/morale use the
+// matching save); `vs` says what degree of success is measured against: the target's AC,
+// its Maneuver value, its Morale value, or a flat DC. Outcomes are simplified to their
+// core, mechanically-applicable effect (damage + the primary condition change) — riders
+// described only in text (e.g. "choose which of 2 targets") are left for the table to
+// apply by hand, same as how structure effects that aren't a clean flat number stay text-only.
+const WAR_ACTIONS = {
+  'Advance':   {cost:1, tactic:null, check:'maneuver', vs:'maneuver', text:'Close the distance with an enemy army.',
+    outcomes:{3:{targetCond:{distant:false,engaged:true}, text:'Enemy loses distant and becomes engaged.'}, 2:{targetCond:{distant:false}, text:'Enemy loses distant, or becomes engaged if already close.'}, 1:{text:'No effect.'}, 0:{selfCond:{mired:1}, text:'Becomes mired 1.'}}},
+  'Battle':    {cost:1, tactic:null, check:'attack', vs:'ac', text:'A basic Strike against an engaged (or, for Siege/ranged, any valid) enemy.',
+    outcomes:{3:{dmg:2, text:'2 damage.'}, 2:{dmg:1, text:'1 damage.'}, 1:{text:'No damage.'}, 0:{text:'No damage.'}}},
+  'Disengage': {cost:2, tactic:null, check:'maneuver', vs:'maneuver', text:'Try to break away from an engaged enemy.',
+    outcomes:{3:{selfCond:{engaged:false}, text:'No longer engaged with any enemy.'}, 2:{selfCond:{engaged:false}, text:'Breaks free of the target army.'}, 1:{text:'Remains engaged.'}, 0:{text:"Remains engaged; can't Disengage from others this turn."}}},
+  'Guard':     {cost:1, tactic:null, check:'maneuver', vs:'flat', dc:10, text:'Brace defensively.',
+    outcomes:{3:{selfCond:{guarding:'all'}, text:'+2 AC against all enemy armies until its next turn.'}, 2:{selfCond:{guarding:'one'}, text:'+2 AC against one chosen enemy army.'}, 1:{text:'No effect.'}, 0:{selfCond:{mired:1}, text:'Becomes mired 1.'}}},
+  'Rally':     {cost:2, tactic:null, check:'morale', vs:'flat', dc:10, text:'Steady the troops.',
+    outcomes:{3:{selfCond:{routed:false,shaken:-2}, text:'No longer routed; shaken reduced by 2.'}, 2:{selfCond:{shaken:-1}, text:'Shaken reduced by 1.'}, 1:{text:'No effect.'}, 0:{selfCond:{shaken:1}, text:'Shaken increases by 1.'}}},
+  'Retreat':   {cost:3, tactic:null, check:'none', vs:'none', text:'Pull back from the fight.',
+    outcomes:{3:{selfCond:{distant:true}, text:'Becomes distant.'}, 2:{selfCond:{distant:true}, text:'Becomes distant (or, if already distant, flees the field and becomes routed).'}, 1:{selfCond:{distant:true}, text:'Becomes distant.'}, 0:{selfCond:{distant:true}, text:'Becomes distant.'}}},
+  'All-Out Assault':        {cost:2, tactic:'Merciless', check:'melee', vs:'ac', text:'An all-in strike, ignoring caution.',
+    outcomes:{3:{dmg:3, text:'3 damage; +1 bonus if the next attack targets someone else.'}, 2:{dmg:2, text:'2 damage.'}, 1:{dmg:1, text:'1 damage.'}, 0:{selfCond:{outflanked:true}, text:'No damage; becomes outflanked.'}}},
+  'Battlefield Medicine':   {cost:3, tactic:'Field Triage', check:'scouting', vs:'flat', dc:25, text:'Treat the wounded.',
+    outcomes:{3:{healAlly:2, text:'Restore 2 HP to a damaged allied army.'}, 2:{healAlly:1, text:'Restore 1 HP to a damaged allied army.'}, 1:{text:'No effect.'}, 0:{targetCond:{weary:1}, text:"Increases the treated army's weary by 1."}}},
+  'Counterattack':          {cost:0, tactic:'Flexible Tactics', check:'melee', vs:'ac', reaction:true, text:'Strike back when an engaged enemy attempts a maneuver.',
+    outcomes:{3:{dmg:1, targetCond:{shaken:1}, text:'1 damage; target shaken increases by 1.'}, 2:{dmg:1, text:'1 damage.'}, 1:{text:'No effect.'}, 0:{text:'No effect.'}}},
+  'Covering Fire':          {cost:2, tactic:'Sharpshooter', check:'ranged', vs:'ac', text:'Suppress an enemy with ranged fire.',
+    outcomes:{3:{dmg:2, targetCond:{suppressed:true}, text:"2 damage; target can't take maneuver reactions until your next turn."}, 2:{dmg:1, targetCond:{suppressed:true}, text:"1 damage; target can't take maneuver reactions."}, 1:{dmg:1, text:'1 damage.'}, 0:{text:'No effect.'}}},
+  'Defensive Stance':       {cost:2, tactic:'Defensive Tactics', check:'maneuver', vs:'flat', dc:10, text:'Cover an ally, shedding their disadvantage.',
+    outcomes:{3:{allyCond:{outflanked:false}, text:'A chosen allied army loses all outflanked conditions.'}, 2:{allyCond:{outflanked:false}, text:'A chosen allied army loses outflanked from one source.'}, 1:{text:'No effect.'}, 0:{selfCond:{outflanked:true}, text:'Becomes outflanked.'}}},
+  'Dirty Fighting':         {cost:1, tactic:'Flexible Tactics', check:'melee', vs:'ac', text:'Exploit an outflanked, non-distant enemy.',
+    outcomes:{3:{targetCond:{weary:2}, text:'Target weary increases by 2.'}, 2:{targetCond:{weary:1}, text:'Target weary increases by 1.'}, 1:{text:'No effect.'}, 0:{targetCond:{weary:-1}, text:"No damage; target's weary is reduced by 1 instead."}}},
+  'False Retreat':          {cost:0, tactic:'Flexible Tactics', check:'morale', vs:'morale', reaction:true, text:"Bait a pursuer after a successful Morale check.",
+    outcomes:{3:{targetCond:{outflanked:true,suppressed:true}, text:"Target becomes outflanked and can't take reactions."}, 2:{targetCond:{outflanked:true}, text:'Target becomes outflanked.'}, 1:{text:'No effect.'}, 0:{selfCond:{outflanked:true}, text:'Becomes outflanked instead.'}}},
+  'Feint':                  {cost:1, tactic:'Flexible Tactics', check:'maneuver', vs:'maneuver', text:'Draw an opening with a false attack.',
+    outcomes:{3:{targetCond:{outflanked:true}, text:'Target is outflanked until the end of the turn.'}, 2:{targetCond:{outflanked:true}, text:"Target is outflanked against your next melee Strike this turn."}, 1:{text:'No effect.'}, 0:{selfCond:{outflanked:true}, text:'Becomes outflanked instead.'}}},
+  'Outflank':               {cost:2, tactic:'Reckless Flankers', check:'maneuver', vs:'maneuver', text:'Circle around an enemy while staying clear of melee.',
+    outcomes:{3:{targetCond:{outflanked:true}, text:'Target becomes outflanked; you choose whether to become engaged.'}, 2:{targetCond:{outflanked:true}, selfCond:{engaged:true}, text:'Target becomes outflanked; you become engaged.'}, 1:{text:'No effect.'}, 0:{selfCond:{outflanked:true}, text:'Becomes outflanked instead.'}}},
+  'Overwhelming Bombardment':{cost:2, tactic:'Explosive Shot', check:'ranged', vs:'fortAC', text:"Bombard a fortification (and whatever's inside).",
+    outcomes:{3:{dmg:2, text:'2 damage to the fortification, plus 1 damage to up to 2 armies inside.'}, 2:{dmg:1, text:'1 damage to the fortification, plus 1 to either it or an army inside (your choice).'}, 1:{dmg:1, text:'1 damage to the fortification only.'}, 0:{selfCond:{outflanked:true}, text:'No damage; becomes outflanked.'}}},
+  'Taunt':                  {cost:1, tactic:'Focused Devotion', check:'morale', vs:'morale', text:'Draw enemy attention and rattle them.',
+    outcomes:{3:{targetCond:{shaken:2}, text:'Target shaken increases by 2.'}, 2:{targetCond:{shaken:1}, text:'Target shaken increases by 1.'}, 1:{text:'No effect.'}, 0:{targetCond:{shaken:-1}, text:"Target's shaken is reduced by 1 instead."}}}
+};
+function warActionsAvailableTo(army){
+  return Object.keys(WAR_ACTIONS).filter(name=>{
+    const a = WAR_ACTIONS[name];
+    return !a.tactic || (army.tactics||[]).includes(a.tactic);
+  });
+}
+// Standard PF2 degree-of-success: beat the DC by 10+ for a crit, miss by 10+ for a crit
+// fail, then a natural 20/1 shifts one step further. Returns 3/2/1/0 (crit success ..
+// crit failure) — used for war actions specifically, since (unlike most of this app's
+// reference-only checks) we actually have concrete opposing AC/DC numbers to check against.
+function degreeOfSuccess(roll, bonus, dc){
+  const total = roll + bonus;
+  let degree = total>=dc ? (total>=dc+10 ? 3 : 2) : (total<=dc-10 ? 0 : 1);
+  if(roll===20) degree = Math.min(3, degree+1);
+  if(roll===1) degree = Math.max(0, degree-1);
+  return degree;
+}
+const DEGREE_LABEL = {3:'Critical Success', 2:'Success', 1:'Failure', 0:'Critical Failure'};
+
 /* ---------- Hex terrain & work sites (GM sets both manually — the app never infers or
    randomizes terrain). Work Site options are gated by terrain per Establish Work Site
    (2e.aonprd.com/Actions.aspx?ID=1392): Lumber Camps need forest, Mines/Quarries need hill
@@ -549,7 +737,10 @@ const DEFAULT_STATE = () => ({
   goods: GOODS.reduce((o,g)=>{o[g]=0;return o;},{}),
   settlements: [],
   log: [],
-  hexes:{}
+  hexes:{},
+  armies: [],
+  warfareRecruitBlockedTurn: 0,
+  warEncounter: null
 });
 
 /* ---------- computed ability engine: scores are never stored directly,
@@ -1034,6 +1225,7 @@ function render(){
   safeRender(renderGoods, 'tab-goods');
   safeRender(renderMapExtras, null);
   safeRender(renderNotesTab, 'tab-notes');
+  safeRender(renderWarfareTab, 'tab-warfare');
 }
 
 /* ---------- OVERVIEW (dashboard) ---------- */
@@ -2070,6 +2262,7 @@ function closeLotOverlay(){
 
 let pickingForSettlement = null;
 let pickingCapital = false;
+let pickingForArmy = null;
 let pendingPickHex = null; // {col,row} tapped but not yet confirmed, while in pick mode
 
 function startPickLocation(id){
@@ -2079,6 +2272,17 @@ function startPickLocation(id){
   pendingPickHex = null;
   switchTab('map');
   renderPickBanner(`Tap a hex to set as ${escapeHtml(s.name)}'s location`);
+}
+// Armies occupy a hex the same conceptual way a Capital/Settlement marker does, but
+// don't own the hex's marker type (state.hexes[key].type) — several armies, or an army
+// and a settlement, can share one hex. Reuses the same pick-a-hex flow as settlements/capital.
+function startPickArmyLocation(id){
+  const a = state.armies.find(x=>x.id===id);
+  if(!a) return;
+  pickingForArmy = id;
+  pendingPickHex = null;
+  switchTab('map');
+  renderPickBanner(`Tap a hex to deploy ${escapeHtml(a.name)} to`);
 }
 function startPickCapital(){
   pickingCapital = true;
@@ -2111,6 +2315,7 @@ function confirmPick(){
   const {col,row} = pendingPickHex;
   if(pickingCapital) pinCapitalLocation(col,row);
   else if(pickingForSettlement) pinSettlementLocation(col,row);
+  else if(pickingForArmy) pinArmyLocation(col,row);
 }
 function pinCapitalLocation(col,row){
   const key = hexKey(col,row);
@@ -2125,10 +2330,22 @@ function pinCapitalLocation(col,row){
 function cancelPickLocation(){
   pickingForSettlement = null;
   pickingCapital = false;
+  pickingForArmy = null;
   pendingPickHex = null;
   document.getElementById('map-float-pick-banner').style.display = 'none';
   const svg = document.getElementById('hexoverlay');
   if(svg) svg.querySelectorAll('.hex-cell').forEach(p=>{ p.classList.remove('picking'); p.classList.remove('pending-confirm'); });
+}
+function pinArmyLocation(col,row){
+  const a = state.armies.find(x=>x.id===pickingForArmy);
+  cancelPickLocation();
+  if(!a) return;
+  a.col = col; a.row = row;
+  scheduleSave();
+  updateHexMarkers();
+  renderWarfareTab();
+  switchTab('warfare');
+  render();
 }
 function pinSettlementLocation(col,row){
   const s = state.settlements.find(x=>x.id===pickingForSettlement);
@@ -2211,6 +2428,302 @@ function renderSettlementsList(){
       <textarea class="wide" placeholder="Notes about this settlement..." rows="2" style="margin-top:10px;" onchange="state.settlements.find(x=>x.id===${s.id}).notes=this.value;scheduleSave();">${escapeHtml(s.notes||'')}</textarea>
       <button class="ghost danger-ghost" style="margin-top:8px;" onclick="removeSettlement(${s.id})">Remove settlement</button>
     </div>`).join('') || '<div class="hint">No settlements founded yet.</div>';
+}
+
+/* =====================================================================
+   ARMIES — recruit/train/outfit/deploy/garrison/recover/disband are all
+   "app shows reference, table resolves the check, picking the outcome
+   confirms it" like everywhere else — except where a cost is pure
+   arithmetic (Outfit Army's RP cost), which is enforced for real.
+===================================================================== */
+const ARMY_GEAR = {
+  'Additional Weapon':     {cost:{rp:10}, effect:'Adds a melee or ranged Strike of the other type.'},
+  'Healing Potions':       {cost:{rp:15}, maxDoses:3, effect:'Use one dose as part of any Maneuver action to regain 1 HP.'},
+  'Magic Armor':           {cost:{rp:25}, minLevel:5,  tier:1, replaces:null, effect:'+1 AC.'},
+  'Greater Magic Armor':   {cost:{rp:50}, minLevel:11, tier:2, replaces:'Magic Armor', effect:'+2 AC.'},
+  'Major Magic Armor':     {cost:{rp:75}, minLevel:18, tier:3, replaces:'Greater Magic Armor', effect:'+3 AC.'},
+  'Magic Weapons':         {cost:{rp:20}, minLevel:2,  tier:1, replaces:null, effect:'+1 on Strikes with that weapon.'},
+  'Greater Magic Weapons': {cost:{rp:40}, minLevel:10, tier:2, replaces:'Magic Weapons', effect:'+2 on Strikes with that weapon.'},
+  'Major Magic Weapons':   {cost:{rp:60}, minLevel:16, tier:3, replaces:'Greater Magic Weapons', effect:'+3 on Strikes with that weapon.'}
+};
+function armyGearAcBonus(army){
+  const g = army.gear||[];
+  if(g.includes('Major Magic Armor')) return 3;
+  if(g.includes('Greater Magic Armor')) return 2;
+  if(g.includes('Magic Armor')) return 1;
+  return 0;
+}
+function armyGearAttackBonus(army){
+  const g = army.gear||[];
+  if(g.includes('Major Magic Weapons')) return 3;
+  if(g.includes('Greater Magic Weapons')) return 2;
+  if(g.includes('Magic Weapons')) return 1;
+  return 0;
+}
+function defaultArmyConditions(){
+  return {shaken:0, weary:0, mired:0, outflanked:false, engaged:false, distant:false, routed:false, defeated:false, fortified:false, efficient:false, suppressed:false, guarding:null};
+}
+function armyActivityAvailable(army){ return army.activityUsedTurn !== state.turn; }
+function markArmyActivityUsed(army){ army.activityUsedTurn = state.turn; }
+
+/* ---- Recruit Army (Army, Downtime trait — not Leadership; no RP cost, just raises
+   Consumption once recruited) ---- */
+function openRecruitArmyPicker(){
+  if(state.warfareRecruitBlockedTurn===state.turn){
+    alert("Can't Recruit Army again this turn after a critical failure — try again next turn.");
+    return;
+  }
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>Recruit Army</h3>
+    <div class="hint" style="margin-top:0;">Warfare check (or Statecraft for a specialized army) against the Recruitment DC. Pick a type, resolve the check at the table, then confirm what happened.</div>
+    ${Object.keys(ARMY_TYPES).map(type=>{
+      const stats = armyStatsAtLevel(type, state.level);
+      return `<button type="button" class="option-card" onclick="openDegreePicker('Recruit ${type}', d=>recruitArmy('${type}',d))">
+        <div class="opt-name">${type} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(level ${stats.level}, Recruitment DC ${stats.recruitDC}, Consumption +${stats.consumption})</span></div>
+        <div class="opt-detail">${escapeHtml(ARMY_TYPES[type].special)}</div>
+      </button>`;
+    }).join('')}
+    <button class="ghost" style="margin-top:8px;" onclick="closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function recruitArmy(type, degree){
+  closeWarfareOverlay();
+  if(degree<=1){
+    if(degree===0){
+      state.unrest += 1;
+      state.warfareRecruitBlockedTurn = state.turn;
+      state.log.unshift({turn:state.turn, note:`Warfare — Recruit Army (${type}) critically failed. +1 Unrest; can't try again this turn.`});
+    } else {
+      state.log.unshift({turn:state.turn, note:`Warfare — Recruit Army (${type}) failed.`});
+    }
+    scheduleSave(); render(); renderWarfareTab();
+    return;
+  }
+  const stats = armyStatsAtLevel(type, state.level);
+  const army = {
+    id: newId(), name: `${type} ${state.armies.filter(a=>a.type===type).length+1}`, type,
+    hp: stats.baseHp, tactics: [], gear: [],
+    conditions: defaultArmyConditions(),
+    col: undefined, row: undefined, activityUsedTurn: 0, rangedShotsUsed: 0
+  };
+  army.conditions.efficient = degree===3;
+  state.armies.push(army);
+  state.consumption += stats.consumption;
+  state.log.unshift({turn:state.turn, note:`Warfare — Recruited ${army.name} (level ${stats.level})${degree===3?', efficient':''}. Consumption +${stats.consumption}.`});
+  scheduleSave();
+  render();
+  renderWarfareTab();
+}
+/* Generic degree-of-success picker (crit success/success/failure/crit failure) used
+   everywhere in Warfare that resolves a check — same "pick what happened" pattern as
+   Structures/Leadership Activities, just with 4 outcomes instead of 1. */
+let pendingDegreeCb = null;
+function openDegreePicker(label, cb){
+  pendingDegreeCb = cb;
+  const overlay = document.createElement('div');
+  overlay.id = 'degree-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:101;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:360px;width:100%;margin:0;">
+    <h3>${escapeHtml(label)}</h3>
+    <div class="hint" style="margin-top:0;">What happened at the table?</div>
+    <button type="button" class="option-card" onclick="resolveDegreePicker(3)"><div class="opt-name">Critical Success</div></button>
+    <button type="button" class="option-card" onclick="resolveDegreePicker(2)"><div class="opt-name">Success</div></button>
+    <button type="button" class="option-card" onclick="resolveDegreePicker(1)"><div class="opt-name">Failure</div></button>
+    <button type="button" class="option-card" onclick="resolveDegreePicker(0)"><div class="opt-name">Critical Failure</div></button>
+    <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('degree-overlay').remove();pendingDegreeCb=null;">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function resolveDegreePicker(degree){
+  const el = document.getElementById('degree-overlay');
+  if(el) el.remove();
+  const cb = pendingDegreeCb;
+  pendingDegreeCb = null;
+  if(cb) cb(degree);
+}
+function closeWarfareOverlay(){
+  const el = document.getElementById('warfare-overlay');
+  if(el) el.remove();
+}
+
+/* ---- Army Activities (one per army per turn): Train / Outfit / Deploy / Garrison /
+   Recover / Disband ---- */
+function openArmyActivityPicker(armyId){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army || !armyActivityAvailable(army)) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>${escapeHtml(army.name)} — Army Activity</h3>
+    <div class="hint" style="margin-top:0;">One Army Activity per army per turn.</div>
+    <button type="button" class="option-card" onclick="closeWarfareOverlay();openTrainArmyPicker('${armyId}')"><div class="opt-name">Train Army</div><div class="opt-detail">Learn a new Tactic (Scholarship or Warfare vs. its Training DC).</div></button>
+    <button type="button" class="option-card" onclick="closeWarfareOverlay();openOutfitArmyPicker('${armyId}')"><div class="opt-name">Outfit Army</div><div class="opt-detail">Buy gear (Trade check) or distribute battle loot (Warfare check, free).</div></button>
+    <button type="button" class="option-card" onclick="closeWarfareOverlay();markArmyActivityUsed(state.armies.find(a=>a.id==='${armyId}'));scheduleSave();startPickArmyLocation('${armyId}')"><div class="opt-name">Deploy Army</div><div class="opt-detail">Move this army to a new hex.</div></button>
+    <button type="button" class="option-card" onclick="closeWarfareOverlay();openDegreePicker('Garrison Army',d=>garrisonArmy('${armyId}',d))"><div class="opt-name">Garrison Army</div><div class="opt-detail">Fortify in a hex with a Settlement/Capital/Work Site.</div></button>
+    <button type="button" class="option-card" onclick="closeWarfareOverlay();openRecoverArmyPicker('${armyId}')"><div class="opt-name">Recover Army</div><div class="opt-detail">Heal HP or reduce a condition.</div></button>
+    <button type="button" class="option-card" onclick="closeWarfareOverlay();disbandArmy('${armyId}')"><div class="opt-name">Disband Army</div><div class="opt-detail">No check needed. Removes the army and its Consumption.</div></button>
+    <button class="ghost" style="margin-top:8px;" onclick="closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function openTrainArmyPicker(armyId){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army) return;
+  const stats = armyStatsAtLevel(army.type, state.level);
+  const options = Object.keys(WAR_TACTICS).filter(name=>{
+    const t = WAR_TACTICS[name];
+    return t.level<=stats.level && (!t.types || t.types.includes(army.type));
+  });
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>Train ${escapeHtml(army.name)}</h3>
+    <div class="hint" style="margin-top:0;">Knows ${army.tactics.length}/${stats.maxTactics} tactics: ${army.tactics.join(', ')||'none'}.</div>
+    <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
+      ${options.map(name=>{
+        const t = WAR_TACTICS[name];
+        const known = army.tactics.includes(name);
+        return `<button type="button" class="option-card" ${known?'style="opacity:.45;pointer-events:none;"':''} onclick="closeWarfareOverlay();openDegreePicker('Train Army — ${escapeAttr(name)}',d=>trainArmyResolve('${armyId}','${escapeAttr(name)}',d))">
+          <div class="opt-name">${escapeHtml(name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(level ${t.level}, DC ${tacticTrainingDC(name)}${known?', known':''})</span></div>
+          <div class="opt-detail">${escapeHtml(t.effect)}</div>
+        </button>`;
+      }).join('')}
+    </div>
+    <button class="ghost" style="margin-top:8px;" onclick="closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function trainArmyResolve(armyId, tacticName, degree){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army) return;
+  markArmyActivityUsed(army);
+  if(degree>=2){
+    const stats = armyStatsAtLevel(army.type, state.level);
+    if(army.tactics.length>=stats.maxTactics) army.tactics.shift(); // replace oldest, per the rules
+    army.tactics.push(tacticName);
+    if(degree===3) army.conditions.efficient = true;
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} learned ${tacticName}${degree===3?' (efficient)':''}.`});
+  } else {
+    if(degree===0) army.conditions.weary += 1;
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} failed to learn ${tacticName}${degree===0?'; weary +1':''}.`});
+  }
+  scheduleSave(); render(); renderWarfareTab();
+}
+function openOutfitArmyPicker(armyId){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army) return;
+  if(army.type==='Siege'){ alert("Siege armies can't be outfitted with gear."); return; }
+  const stats = armyStatsAtLevel(army.type, state.level);
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>Outfit ${escapeHtml(army.name)}</h3>
+    <div class="hint" style="margin-top:0;">Current gear: ${army.gear.length?army.gear.join(', '):'none'}. RP balance: ${state.rp}.</div>
+    <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
+      ${Object.keys(ARMY_GEAR).map(name=>{
+        const g = ARMY_GEAR[name];
+        const doseCount = name==='Healing Potions' ? army.gear.filter(x=>x==='Healing Potions').length : 0;
+        const maxedDoses = name==='Healing Potions' && doseCount>=g.maxDoses;
+        const tooLow = g.minLevel && stats.level<g.minLevel;
+        const problem = affordabilityMessage(g.cost) || (maxedDoses?'Already at max doses (3).':null) || (tooLow?`Needs army level ${g.minLevel}.`:null);
+        return `<button type="button" class="option-card" ${problem?'style="opacity:.45;pointer-events:none;"':''} onclick="closeWarfareOverlay();openDegreePicker('Outfit Army — ${escapeAttr(name)}',d=>outfitArmyResolve('${armyId}','${escapeAttr(name)}',d))">
+          <div class="opt-name">${escapeHtml(name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${formatCost(g.cost)})</span></div>
+          <div class="opt-detail">${escapeHtml(g.effect)}${problem?` — <span style="color:var(--rust);">${escapeHtml(problem)}</span>`:''}</div>
+        </button>`;
+      }).join('')}
+    </div>
+    <button class="ghost" style="margin-top:8px;" onclick="closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function outfitArmyResolve(armyId, gearName, degree){
+  const army = state.armies.find(a=>a.id===armyId);
+  const g = ARMY_GEAR[gearName];
+  if(!army || !g) return;
+  markArmyActivityUsed(army);
+  const problem = affordabilityMessage(g.cost);
+  if(problem){ alert(problem); return; }
+  if(degree>=2){
+    spendResources(g.cost);
+    if(g.replaces) army.gear = army.gear.filter(x=>x!==g.replaces);
+    army.gear.push(gearName);
+    if(degree===3) army.conditions.efficient = true;
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} outfitted with ${gearName}${degree===3?' (efficient)':''}.`});
+  } else if(degree===1){
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} failed to acquire ${gearName}; RP not spent.`});
+  } else {
+    spendResources(g.cost);
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} failed to acquire ${gearName}; RP spent anyway.`});
+  }
+  scheduleSave(); render(); renderWarfareTab();
+}
+function garrisonArmy(armyId, degree){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army) return;
+  markArmyActivityUsed(army);
+  const key = army.col!==undefined ? hexKey(army.col,army.row) : null;
+  const h = key ? state.hexes[key] : null;
+  const validHex = h && ['Capital','Settlement'].includes(h.type) || (h && h.workSite);
+  if(!validHex){
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} couldn't Garrison here (needs a Capital/Settlement/Work Site hex).`});
+  } else if(degree>=2){
+    if(degree===3) army.conditions.fortified = true;
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} garrisoned${degree===3?' and is fortified':''}.`});
+  } else {
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} failed to garrison.`});
+  }
+  scheduleSave(); render(); renderWarfareTab();
+}
+function openRecoverArmyPicker(armyId){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army) return;
+  const options = ['Heal 1 HP','Reduce shaken','Reduce weary','Reduce mired','Clear outflanked','Clear distant'];
+  const overlay = document.createElement('div');
+  overlay.id = 'warfare-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:400px;width:100%;margin:0;">
+    <h3>Recover ${escapeHtml(army.name)}</h3>
+    <div class="hint" style="margin-top:0;">${army.conditions.defeated ? 'This army is defeated — recovering it uses DC +5.' : ''}</div>
+    ${options.map(o=>`<button type="button" class="option-card" onclick="closeWarfareOverlay();openDegreePicker('Recover Army — ${o}',d=>recoverArmyResolve('${armyId}','${o}',d))"><div class="opt-name">${o}</div></button>`).join('')}
+    <button class="ghost" style="margin-top:8px;" onclick="closeWarfareOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function recoverArmyResolve(armyId, choice, degree){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army) return;
+  markArmyActivityUsed(army);
+  if(degree>=2){
+    const maxHp = armyEffectiveMaxHp(army);
+    if(choice==='Heal 1 HP') army.hp = Math.min(maxHp, army.hp + (degree===3?2:1));
+    else if(choice==='Reduce shaken') army.conditions.shaken = Math.max(0, army.conditions.shaken-1);
+    else if(choice==='Reduce weary') army.conditions.weary = Math.max(0, army.conditions.weary-1);
+    else if(choice==='Reduce mired') army.conditions.mired = Math.max(0, army.conditions.mired-1);
+    else if(choice==='Clear outflanked') army.conditions.outflanked = false;
+    else if(choice==='Clear distant') army.conditions.distant = false;
+    if(army.hp>0) army.conditions.defeated = false;
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name} recovered (${choice}).`});
+  } else {
+    state.log.unshift({turn:state.turn, note:`Warfare — ${army.name}'s Recover Army attempt failed (${choice}).`});
+  }
+  scheduleSave(); render(); renderWarfareTab();
+}
+function disbandArmy(armyId){
+  const army = state.armies.find(a=>a.id===armyId);
+  if(!army) return;
+  if(!confirm(`Disband ${army.name}? This can't be undone — its gear is lost unless you've already noted where it's going.`)) return;
+  const stats = armyStatsAtLevel(army.type, state.level);
+  state.consumption = Math.max(0, state.consumption - stats.consumption);
+  state.armies = state.armies.filter(a=>a.id!==armyId);
+  state.log.unshift({turn:state.turn, note:`Warfare — Disbanded ${army.name}. Consumption −${stats.consumption}.`});
+  scheduleSave(); render(); renderWarfareTab();
 }
 
 /* =====================================================================
@@ -2417,6 +2930,23 @@ function updateHexMarkers(){
       label.textContent = h.name.length>16 ? h.name.slice(0,15)+'…' : h.name;
       frag.appendChild(label);
     }
+  });
+  const armiesByHex = {};
+  state.armies.forEach(a=>{
+    if(a.col===undefined || a.row===undefined) return;
+    const k = hexKey(a.col,a.row);
+    (armiesByHex[k] = armiesByHex[k]||[]).push(a);
+  });
+  Object.keys(armiesByHex).forEach(key=>{
+    const [col,row] = key.split('_').map(Number);
+    const [cx,cy] = hexCenter(col,row);
+    const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x', (cx+HEX_S*0.5).toFixed(1));
+    text.setAttribute('y', (cy-HEX_S*0.35).toFixed(1));
+    text.setAttribute('class','hex-marker army-marker');
+    const n = armiesByHex[key].length;
+    text.textContent = '⚔' + (n>1 ? n : '');
+    frag.appendChild(text);
   });
   svg.appendChild(frag);
 }
@@ -2661,6 +3191,79 @@ function jumpToHex(col,row){
   switchTab('map');
   openHexPanel(col,row);
 }
+
+/* ---------- WARFARE TAB ---------- */
+function renameArmy(id, name){
+  const a = state.armies.find(x=>x.id===id);
+  if(!a) return;
+  a.name = name;
+  scheduleSave();
+}
+function renderArmyCard(army){
+  const stats = armyStatsAtLevel(army.type, state.level);
+  const maxHp = armyEffectiveMaxHp(army);
+  const rt = armyEffectiveRoutThreshold(army);
+  const ac = stats.ac + armyGearAcBonus(army) - (army.conditions.weary||0) - (army.conditions.outflanked?2:0);
+  const atk = stats.attack + armyGearAttackBonus(army);
+  const locLabel = army.col!==undefined ? hexLabel(army.col,army.row) : null;
+  const condParts = [];
+  if(army.conditions.shaken) condParts.push(`Shaken ${army.conditions.shaken}`);
+  if(army.conditions.weary) condParts.push(`Weary ${army.conditions.weary}`);
+  if(army.conditions.mired) condParts.push(`Mired ${army.conditions.mired}`);
+  if(army.conditions.outflanked) condParts.push('Outflanked');
+  if(army.conditions.engaged) condParts.push('Engaged');
+  if(army.conditions.distant) condParts.push('Distant');
+  if(army.conditions.routed) condParts.push('Routed');
+  if(army.conditions.defeated) condParts.push('Defeated');
+  if(army.conditions.fortified) condParts.push('Fortified');
+  if(army.conditions.efficient) condParts.push('Efficient');
+  const belowRT = army.hp<=rt && army.hp>0;
+  return `<div class="settlement">
+    <div class="settlement-head">
+      <input type="text" value="${escapeAttr(army.name)}" style="font-family:'Cinzel',serif;font-weight:600;background:none;border:none;font-size:16px;padding:0;flex:1;" onchange="renameArmy('${army.id}',this.value)">
+      <span class="pill">${army.type} · Lv ${stats.level}</span>
+    </div>
+    <div class="settlement-loc">
+      ${locLabel ? `<span class="loc-pin">⌖ ${locLabel}</span><button class="loc-link" onclick="jumpToHex(${army.col},${army.row})">view</button>` : `<span class="hint" style="margin:0;">Not deployed</span>`}
+    </div>
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin:10px 0;">
+      <div class="seal"><div class="val mono">${army.hp}/${maxHp}</div><div class="lbl">HP</div><div class="sub">RT ${rt}</div></div>
+      <div class="seal"><div class="val mono">${ac}</div><div class="lbl">AC</div></div>
+      <div class="seal"><div class="val mono">${fmt(stats.maneuver)}</div><div class="lbl">Maneuver</div></div>
+      <div class="seal"><div class="val mono">${fmt(stats.morale)}</div><div class="lbl">Morale</div></div>
+    </div>
+    <div class="hint" style="margin-top:0;">Scouting ${fmt(stats.scouting)} · Attack ${fmt(atk)} (${stats.attackKind}) · Consumption ${stats.consumption}${belowRT?' · <span style="color:var(--rust);">at/below Rout Threshold</span>':''}</div>
+    <div class="hint" style="margin-top:4px;">Tactics: ${army.tactics.length?escapeHtml(army.tactics.join(', ')):'none'}</div>
+    <div class="hint" style="margin-top:2px;">Gear: ${army.gear.length?escapeHtml(army.gear.join(', ')):'none'}</div>
+    ${condParts.length ? `<div class="ability-tags" style="margin-top:6px;">${condParts.map(c=>`<span class="ability-tag neg">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+      <button class="small-ghost" ${armyActivityAvailable(army)?'':'style="opacity:.4;pointer-events:none;"'} onclick="openArmyActivityPicker('${army.id}')">${armyActivityAvailable(army)?'Army Activity':'Activity used'}</button>
+      <button class="small-ghost" onclick="startPickArmyLocation('${army.id}')">Deploy</button>
+    </div>
+  </div>`;
+}
+function renderWarfareTab(){
+  const el = document.getElementById('warfare-content');
+  if(!el) return;
+  el.innerHTML = `
+    <div class="card">
+      <h3>Armies <span class="sub">${state.armies.length}</span></h3>
+      <div class="hint" style="margin-top:0;">Beta — full Kingmaker Warfare (Appendix 3). Same reference-and-log pattern as Structures: resolve the check at the table, then pick what happened.</div>
+      <button class="action" onclick="openRecruitArmyPicker()">Recruit Army</button>
+    </div>
+    ${state.armies.length ? state.armies.map(renderArmyCard).join('') : '<div class="hint">No armies recruited yet.</div>'}
+    <div class="card">
+      <h3>War Encounter</h3>
+      ${state.warEncounter ? renderWarEncounterCard() : `
+        <div class="hint" style="margin-top:0;">Resolve a full round-by-round battle between armies on or near a hex — initiative, war actions, Morale/Rout, terrain and weather.</div>
+        <button class="action" onclick="openStartWarEncounterPicker()">Start War Encounter</button>
+      `}
+    </div>`;
+}
+// War encounter setup/round engine — see openStartWarEncounterPicker below (built out
+// alongside the rest of the battle resolver).
+function renderWarEncounterCard(){ return '<div class="hint" style="margin-top:0;">Loading…</div>'; }
+function openStartWarEncounterPicker(){ alert('Battle setup not wired up yet.'); }
 
 /* =====================================================================
    BINDINGS
