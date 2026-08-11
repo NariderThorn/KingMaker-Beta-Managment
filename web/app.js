@@ -199,6 +199,138 @@ function featResourceDieBonus(){
     return (def && def.resourceDie) ? sum+def.resourceDie : sum;
   }, 0);
 }
+// KM_STRUCTURES — full structure list, Kingmaker Adventure Path (core book) +
+// two Companion Guide structures noted as companion-locked.
+// Source: Archives of Nethys, https://2e.aonprd.com/KMStructures.aspx
+//
+// COPYRIGHT NOTE FOR WHOEVER IMPLEMENTS THIS:
+// name / level / lots / cost / construction skill+rank+DC / upgradeFrom / upgradeTo /
+// itemBonus / ruin are bare game facts — safe to use as-is, not copyrightable.
+// `effect` has ALREADY been rewritten in our own words below — it is NOT copied from
+// Paizo's text. If this list is ever extended, keep following that same split: pull
+// the facts directly, write the effect description from scratch.
+//
+// `level` = minimum settlement level to build (shown as "Structure N" on AoN).
+// `lots` = null means no lot cost (Infrastructure-type: walls, streets, sewers, etc.)
+// `construction.rank` = null means no proficiency rank required, just the DC.
+// `category` = AoN's own trait tags: Building / Residential / Edifice / Yard / Infrastructure
+//   (Edifice/Yard/Infrastructure are themselves also "Building" except pure Yards/Infrastructure —
+//   kept as AoN tags them, for the block-adjacency rules some structures reference)
+// `companionLocked` = requires that specific companion be part of the kingdom (Companion Guide, not core book)
+const KM_STRUCTURES = [
+  { name:"Academy", level:10, lots:2, cost:{rp:52,lumber:12,luxuries:6,stone:12}, construction:{skill:"Scholarship",rank:"expert",dc:27}, category:["Building","Edifice"], upgradeFrom:"Library", upgradeTo:["Military Academy","University"], itemBonus:"+2 item bonus to Creative Solution", effect:"Grants a bonus to Lore checks made to Recall Knowledge, to Research checks, and to Decipher Writing while in this settlement." },
+  { name:"Alchemy Laboratory", level:3, lots:1, cost:{rp:18,ore:2,stone:5}, construction:{skill:"Industry",rank:"trained",dc:16}, category:["Building"], itemBonus:"+1 item bonus to Demolish", effect:"Makes higher-level alchemical items available for sale here (stacks up to 3), and gives a bonus to Identify Alchemy checks in this settlement." },
+  { name:"Arcanist's Tower", level:5, lots:1, cost:{rp:30,ore:6}, construction:{skill:"Magic",rank:"trained",dc:20}, category:["Building"], itemBonus:"+1 item bonus to Quell Unrest using Magic", effect:"Makes higher-level arcane items available for sale here (stacks up to 3), and gives a bonus to Borrow an Arcane Spell or Learn a Spell." },
+  { name:"Arena", level:9, lots:4, cost:{rp:40,lumber:6,stone:12}, construction:{skill:"Warfare",rank:"expert",dc:26}, category:["Edifice","Yard"], upgradeTo:["Gladiatorial Arena"], itemBonus:"+2 item bonus to Celebrate Holiday and to Warfare checks to Quell Unrest", effect:"Lets you retrain combat feats faster while in this settlement." },
+  { name:"Bank", level:5, lots:1, cost:{rp:28,ore:4,stone:6}, construction:{skill:"Trade",rank:"trained",dc:20}, category:["Building"], itemBonus:"+1 item bonus to Tap Treasury", effect:"Required in a settlement's influence area to use the Capital Investment activity." },
+  { name:"Barracks", level:3, lots:1, cost:{rp:6,lumber:2,stone:1}, construction:{skill:"Defense",rank:null,dc:16}, category:["Building","Residential"], upgradeTo:["Garrison"], itemBonus:"+1 item bonus to Garrison Army, Recover Army, or Recruit Army", effect:"Helps recruit and recover armies. First one built in any settlement reduces Unrest by 1." },
+  { name:"Brewery", level:1, lots:1, cost:{rp:6,lumber:2}, construction:{skill:"Agriculture",rank:null,dc:15}, category:["Building"], itemBonus:"+1 item bonus to Establish Trade Agreement", effect:"Reduces Unrest by 1 when built, as long as the settlement has fewer than 4 breweries already." },
+  { name:"Bridge", level:2, lots:null, cost:{rp:6,lumber:1}, construction:{skill:"Engineering",rank:null,dc:16}, category:["Infrastructure"], effect:"Connects an island settlement across a Water Border, removing the usual trade penalty and letting the settlement contribute influence. Can only be built on a Water Border hex." },
+  { name:"Castle", level:9, lots:4, cost:{rp:54,lumber:12,stone:12}, construction:{skill:"Defense/Industry/Magic/Statecraft",rank:"expert",dc:26}, category:["Building","Edifice","Famous","Infamous"], upgradeFrom:"Town Hall", upgradeTo:["Palace"], itemBonus:"+2 item bonus to New Leadership, Pledge of Fealty, Send Diplomatic Envoy, and to army recruitment/recovery/garrisoning", effect:"First one built each turn reduces Unrest by 1d4. In the capital, lets leaders take 3 Leadership activities per turn instead of 2." },
+  { name:"Cathedral", level:15, lots:4, cost:{rp:58,lumber:20,stone:20}, construction:{skill:"Folklore",rank:"master",dc:34}, category:["Building","Edifice","Famous","Infamous"], upgradeFrom:"Temple", itemBonus:"+3 item bonus to Celebrate Holiday, Provide Care, and Repair Reputation (Corruption)", effect:"First one built in a turn reduces Unrest by 4. Bonus to Lore/Religion checks made while Investigating or Researching faith topics. Makes higher-level divine items available (doesn't stack with Shrine/Temple)." },
+  { name:"Cemetery", level:1, lots:1, cost:{rp:4,stone:1}, construction:{skill:"Folklore",rank:null,dc:15}, category:["Yard"], effect:"Reduces Unrest gained from dangerous events in this settlement by 1 per cemetery, up to 4." },
+  { name:"Construction Yard", level:10, lots:4, cost:{rp:40,lumber:10,stone:10}, construction:{skill:"Engineering",rank:null,dc:27}, category:["Yard"], itemBonus:"+1 item bonus to Build Structure and to Repair Reputation (Decay)", effect:"Speeds up future construction and helps counter Decay." },
+  { name:"Dump", level:2, lots:1, cost:{rp:4}, construction:{skill:"Industry",rank:null,dc:16}, category:["Yard"], itemBonus:"+1 item bonus to Demolish", effect:"Softens the impact of certain events on settlements that have one. Cannot share a block with Residential structures." },
+  { name:"Embassy", level:8, lots:2, cost:{rp:26,lumber:10,luxuries:6,stone:4}, construction:{skill:"Politics",rank:null,dc:24}, category:["Building"], itemBonus:"+1 item bonus to Send Diplomatic Envoy and Request Foreign Aid", effect:"Houses foreign diplomats and improves international relations." },
+  { name:"Festival Hall", level:3, lots:1, cost:{rp:7,lumber:3}, construction:{skill:"Arts",rank:null,dc:18}, category:["Building"], upgradeTo:["Theater"], itemBonus:"+1 item bonus to Celebrate Holiday", effect:"A small venue for public gatherings and celebrations." },
+  { name:"Foundry", level:3, lots:2, cost:{rp:16,lumber:5,ore:2,stone:3}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Establish Work Site (mine)", effect:"Each foundry adds 1 to your kingdom's maximum Ore storage. Can't share a block with a Residential structure." },
+  { name:"Garrison", level:5, lots:2, cost:{rp:28,lumber:6,stone:3}, construction:{skill:"Warfare",rank:"trained",dc:20}, category:["Building","Residential"], upgradeFrom:"Barracks", itemBonus:"+1 item bonus to Outfit Army or Train Army", effect:"Outfits and trains your armies. Reduces Unrest by 1 when built." },
+  { name:"General Store", level:1, lots:1, cost:{rp:8,lumber:1}, construction:{skill:"Trade",rank:null,dc:15}, category:["Building"], upgradeTo:["Luxury Store","Marketplace"], effect:"Without a general store or marketplace, a settlement's effective level for item availability drops by 2." },
+  { name:"Gladiatorial Arena", level:15, lots:4, cost:{rp:58,lumber:10,stone:30}, construction:{skill:"Warfare",rank:"master",dc:34}, category:["Edifice","Famous","Infamous","Yard"], upgradeFrom:"Arena", itemBonus:"+3 item bonus to Celebrate Holiday, Hire Adventurers, and Warfare checks to Quell Unrest", effect:"Lets a PC here retrain combat feats even faster than a plain Arena.", companionLocked:"Amiri" },
+  { name:"Granary", level:1, lots:1, cost:{rp:12,lumber:2}, construction:{skill:"Agriculture",rank:null,dc:15}, category:["Building"], effect:"Each granary adds 1 to your kingdom's maximum Food storage.", storageBonus:{good:"Food", amt:1} },
+  { name:"Guildhall", level:5, lots:2, cost:{rp:34,lumber:8}, construction:{skill:"Trade",rank:"expert",dc:20}, upgradeFrom:"Trade Shop", category:["Building"], itemBonus:"+1 item bonus to Economy checks tied to the guild's trade focus", effect:"A trade-specific headquarters (you choose the trade) — gives a bonus to Earn Income or Repair checks related to that trade while here." },
+  { name:"Herbalist", level:1, lots:1, cost:{rp:10,lumber:1}, construction:{skill:"Wilderness",rank:null,dc:15}, category:["Building"], upgradeTo:["Hospital"], itemBonus:"+1 item bonus to Provide Care", effect:"Small medicinal garden and shop." },
+  { name:"Hospital", level:9, lots:2, cost:{rp:30,lumber:10,stone:6}, construction:{skill:"Defense",rank:"expert",dc:26}, upgradeFrom:"Herbalist", category:["Building"], itemBonus:"+1 item bonus to Provide Care and Quell Unrest", effect:"Bonus to Medicine checks to Treat Disease and Treat Wounds while here." },
+  { name:"Houses", level:1, lots:1, cost:{rp:3,lumber:1}, construction:{skill:"Industry",rank:null,dc:15}, category:["Building","Residential"], upgradeFrom:"Tenement", upgradeTo:["Mansion","Orphanage"], effect:"First one built each turn reduces Unrest by 1." },
+  { name:"Illicit Market", level:6, lots:1, cost:{rp:50,lumber:5}, construction:{skill:"Intrigue",rank:"trained",dc:22}, category:["Building","Infamous"], itemBonus:"+1 item bonus to Clandestine Business", ruin:"+1 Crime", effect:"Makes higher-level items available for sale here (stacks up to 3), at the cost of raising Crime." },
+  { name:"Inn", level:1, lots:1, cost:{rp:10,lumber:2}, construction:{skill:"Trade",rank:null,dc:15}, category:["Building","Residential"], itemBonus:"+1 item bonus to Hire Adventurers", effect:"Safe lodging for visitors." },
+  { name:"Jail", level:2, lots:1, cost:{rp:14,lumber:4,ore:2,stone:4}, construction:{skill:"Defense",rank:null,dc:16}, category:["Building"], itemBonus:"+1 item bonus to Quell Unrest using Intrigue", effect:"First one built each turn reduces Crime by 1." },
+  { name:"Keep", level:3, lots:2, cost:{rp:32,lumber:8,stone:8}, construction:{skill:"Defense",rank:"trained",dc:18}, category:["Building","Edifice"], itemBonus:"+1 item bonus to Deploy Army, Garrison Army, or Train Army", effect:"First one built each turn reduces Unrest by 1." },
+  { name:"Library", level:2, lots:1, cost:{rp:6,lumber:4,stone:2}, construction:{skill:"Scholarship",rank:"trained",dc:16}, category:["Building"], upgradeTo:["Academy"], itemBonus:"+1 item bonus to Rest and Relax using Scholarship", effect:"Bonus to Lore checks to Recall Knowledge, to Research checks, and to Decipher Writing while here." },
+  { name:"Lumberyard", level:3, lots:2, cost:{rp:16,lumber:5,ore:1}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Yard"], itemBonus:"+1 item bonus to Establish Work Site (lumber camp)", effect:"Each lumberyard adds 1 to your kingdom's maximum Lumber storage. Must be built on a lot next to a Water Border.", storageBonus:{good:"Lumber", amt:1} },
+  { name:"Luxury Store", level:6, lots:1, cost:{rp:28,lumber:10,luxuries:6}, construction:{skill:"Trade",rank:"expert",dc:22}, upgradeFrom:"General Store", upgradeTo:["Magic Shop"], category:["Building"], itemBonus:"+1 item bonus to Establish Trade Agreement", effect:"Must be built on a block with a Mansion or Noble Villa. Makes higher-level luxury magic items available here (stacks up to 3, GM approval)." },
+  { name:"Magic Shop", level:8, lots:1, cost:{rp:44,lumber:8,luxuries:6,stone:6}, construction:{skill:"Magic",rank:"expert",dc:24}, upgradeFrom:"Luxury Store", upgradeTo:["Occult Shop"], category:["Building"], itemBonus:"+1 item bonus to Supernatural Solution", effect:"Makes higher-level magic items available here (stacks up to 3)." },
+  { name:"Magical Streetlamps", level:5, lots:null, cost:{rp:20}, construction:{skill:"Magic",rank:"expert",dc:20}, category:["Infrastructure"], effect:"Lights the whole settlement at night. First built in a turn reduces Crime by 1." },
+  { name:"Mansion", level:5, lots:1, cost:{rp:10,lumber:6,luxuries:6,stone:3}, construction:{skill:"Industry",rank:"trained",dc:20}, upgradeFrom:"Houses", upgradeTo:["Noble Villa"], category:["Building","Residential"], itemBonus:"+1 item bonus to Improve Lifestyle", effect:"A larger home for a wealthy family." },
+  { name:"Marketplace", level:4, lots:2, cost:{rp:48,lumber:4}, construction:{skill:"Trade",rank:"trained",dc:19}, upgradeFrom:"General Store", category:["Building","Residential"], itemBonus:"+1 item bonus to Establish Trade Agreement", effect:"Without a general store or marketplace, a town's effective level for item availability drops by 2." },
+  { name:"Menagerie", level:12, lots:4, cost:{rp:26,lumber:14,ore:10,stone:10}, construction:{skill:"Wilderness",rank:"expert",dc:30}, upgradeFrom:"Park", category:["Building","Edifice"], itemBonus:"+2 item bonus to Rest and Relax using Wilderness", effect:"Houses captured low-level creatures for display; adding one grants Fame/Infamy or reduces a Ruin. Adds Unrest for each sapient creature on display." },
+  { name:"Military Academy", level:12, lots:2, cost:{rp:36,lumber:12,ore:6,stone:10}, construction:{skill:"Warfare",rank:"expert",dc:30}, upgradeFrom:"Academy", category:["Building","Edifice"], itemBonus:"+2 item bonus to Pledge of Fealty using Warfare, +2 to Train Army", effect:"Trains elite soldiers and officers." },
+  { name:"Mill", level:2, lots:1, cost:{rp:6,lumber:2,stone:1}, construction:{skill:"Industry",rank:"trained",dc:16}, category:["Building"], itemBonus:"+1 item bonus to Harvest Crops", effect:"If built next to a Water Border, reduces the settlement's Consumption by 1." },
+  { name:"Mint", level:15, lots:1, cost:{rp:30,lumber:12,ore:20,stone:16}, construction:{skill:"Trade",rank:"master",dc:34}, category:["Building","Edifice"], itemBonus:"+3 item bonus to Capital Investment, Collect Taxes, and Repair Reputation (Crime)", effect:"Mints the kingdom's own coinage, boosting the economy." },
+  { name:"Monument", level:3, lots:1, cost:{rp:6,stone:1}, construction:{skill:"Arts",rank:"trained",dc:18}, category:["Building","Edifice"], itemBonus:"First one built each turn reduces Unrest by 1 and one Ruin of your choice by 1", effect:"A commemorative landmark." },
+  { name:"Museum", level:5, lots:2, cost:{rp:30,lumber:6,stone:2}, construction:{skill:"Exploration",rank:"trained",dc:20}, category:["Building","Famous","Infamous"], itemBonus:"+1 item bonus to Rest and Relax using Arts", effect:"Donating a significant magic item (level 6+) here reduces Unrest by 1; removing it later raises Unrest by 1." },
+  { name:"Noble Villa", level:9, lots:2, cost:{rp:24,lumber:10,luxuries:6,stone:8}, construction:{skill:"Politics",rank:"expert",dc:19}, upgradeFrom:"Mansion", category:["Building","Residential"], itemBonus:"+1 item bonus to Improve Lifestyle and to Quell Unrest using Politics", effect:"First one built each turn reduces Unrest by 2." },
+  { name:"Occult Shop", level:13, lots:1, cost:{rp:38,lumber:12,luxuries:12,stone:6}, construction:{skill:"Magic",rank:"master",dc:32}, upgradeFrom:"Magic Shop", category:["Building"], itemBonus:"+2 item bonus to Prognostication", effect:"Makes higher-level magic items available here (stacks up to 3). Bonus to Research or Recall Knowledge on esoteric subjects." },
+  { name:"Opera House", level:15, lots:2, cost:{rp:40,lumber:20,luxuries:18,stone:16}, construction:{skill:"Arts",rank:"master",dc:34}, upgradeFrom:"Theater", category:["Building","Edifice","Famous","Infamous"], itemBonus:"+3 item bonus to Celebrate Holiday and Create a Masterpiece", effect:"First one built each turn reduces Unrest by 4. Bonus to Performance checks to Earn Income while here." },
+  { name:"Orphanage", level:2, lots:1, cost:{rp:6,lumber:2}, construction:{skill:"Industry",rank:null,dc:16}, upgradeFrom:"Houses", category:["Building","Residential"], effect:"First one built each turn reduces Unrest by 1." },
+  { name:"Palace", level:15, lots:4, cost:{rp:108,lumber:20,luxuries:12,ore:15,stone:20}, construction:{skill:"Defense/Industry/Magic/Statecraft",rank:"master",dc:34}, upgradeFrom:"Castle", category:["Building","Edifice","Famous","Infamous"], itemBonus:"+3 item bonus to New Leadership, Pledge of Fealty, Send Diplomatic Envoy, and army recruitment/recovery/garrisoning", effect:"Capital only. First built reduces Unrest by 10. Lets leaders take 3 Leadership activities per turn; the Ruler gets a further bonus to Leadership checks." },
+  { name:"Park", level:3, lots:1, cost:{rp:5}, construction:{skill:"Wilderness",rank:null,dc:18}, upgradeTo:["Menagerie"], category:["Yard"], itemBonus:"+1 item bonus to Rest and Relax using Wilderness", effect:"First one built each turn reduces Unrest by 1." },
+  { name:"Paved Streets", level:4, lots:null, cost:{rp:12,stone:6}, construction:{skill:"Industry",rank:"trained",dc:19}, category:["Infrastructure"], effect:"Speeds movement between lots within the settlement." },
+  { name:"Pier", level:3, lots:1, cost:{rp:16,lumber:2}, construction:{skill:"Boating",rank:null,dc:18}, upgradeTo:["Waterfront"], category:["Yard"], itemBonus:"+1 item bonus to Go Fishing", effect:"Must be built next to a Water Border." },
+  { name:"Printing House", level:10, lots:2, cost:{rp:48,lumber:12,luxuries:12}, construction:{skill:"Industry",rank:"master",dc:27}, category:["Building","Edifice"], itemBonus:"+2 item bonus to Improve Lifestyle and Quell Unrest", effect:"Bonus to Gather Information or Research checks made in a settlement that also has a library or similar structure.", companionLocked:"Linzi" },
+  { name:"Sacred Grove", level:5, lots:1, cost:{rp:36}, construction:{skill:"Wilderness",rank:"trained",dc:20}, category:["Yard"], itemBonus:"+1 item bonus to Quell Unrest using Folklore", effect:"Makes higher-level primal magic items available here (stacks up to 3)." },
+  { name:"Secure Warehouse", level:6, lots:2, cost:{rp:24,lumber:6,ore:4,stone:6}, construction:{skill:"Industry",rank:"expert",dc:22}, category:["Building"], itemBonus:"+1 item bonus to Craft Luxuries", effect:"Each secure warehouse adds 1 to your kingdom's maximum Luxuries storage.", storageBonus:{good:"Luxuries", amt:1} },
+  { name:"Sewer System", level:7, lots:null, cost:{rp:24,lumber:8,stone:8}, construction:{skill:"Engineering",rank:"expert",dc:23}, category:["Infrastructure"], itemBonus:"+1 item bonus to Clandestine Business", effect:"Reduces the settlement's Consumption by 1." },
+  { name:"Shrine", level:1, lots:1, cost:{rp:8,lumber:2,stone:1}, construction:{skill:"Folklore",rank:"trained",dc:15}, upgradeTo:["Temple"], category:["Building"], itemBonus:"+1 item bonus to Celebrate Holiday", effect:"Makes higher-level divine items available here (stacks up to 3; doesn't stack with Temple/Cathedral)." },
+  { name:"Smithy", level:3, lots:1, cost:{rp:8,lumber:2,ore:1,stone:1}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Trade Commodities, +1 to Outfit Army", effect:"Bonus to Craft checks involving metalwork while here." },
+  { name:"Specialized Artisan", level:4, lots:1, cost:{rp:10,lumber:4,luxuries:1}, construction:{skill:"Trade",rank:"expert",dc:19}, category:["Building"], itemBonus:"+1 item bonus to Craft Luxuries", effect:"Bonus to Craft checks for fine/specialty goods while here." },
+  { name:"Stable", level:3, lots:1, cost:{rp:10,lumber:2}, construction:{skill:"Wilderness",rank:"trained",dc:18}, category:["Yard"], itemBonus:"+1 item bonus to Establish Trade Agreement", effect:"Houses, trains, and sells mounts." },
+  { name:"Stockyard", level:3, lots:4, cost:{rp:20,lumber:4}, construction:{skill:"Industry",rank:null,dc:18}, category:["Yard"], itemBonus:"+1 item bonus to Gather Livestock", effect:"Reduces the settlement's Consumption by 1." },
+  { name:"Stonemason", level:3, lots:2, cost:{rp:16,lumber:2}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Establish Work Site (quarry)", effect:"Each stonemason adds 1 to your kingdom's maximum Stone storage.", storageBonus:{good:"Stone", amt:1} },
+  { name:"Tannery", level:3, lots:1, cost:{rp:6,lumber:2}, construction:{skill:"Industry",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to Trade Commodities", effect:"Cannot share a block with Residential structures except Tenements." },
+  { name:"Tavern, Dive", level:1, lots:1, cost:{rp:12,lumber:1}, construction:{skill:"Trade",rank:"trained",dc:15}, upgradeTo:["Tavern, Popular"], category:["Building"], effect:"First one built in a turn reduces Unrest by 1 but raises Crime by 1." },
+  { name:"Tavern, Popular", level:3, lots:1, cost:{rp:24,lumber:6,stone:2}, construction:{skill:"Trade",rank:"expert",dc:18}, upgradeFrom:"Tavern, Dive", upgradeTo:["Tavern, Luxury"], category:["Building"], itemBonus:"+1 item bonus to Hire Adventurers and Rest and Relax using Trade", effect:"First one built in a turn reduces Unrest by 2. Bonus to Performance checks to Earn Income, and to Gather Information, while here." },
+  { name:"Tavern, Luxury", level:9, lots:2, cost:{rp:48,lumber:10,luxuries:8,stone:8}, construction:{skill:"Trade",rank:"master",dc:26}, upgradeFrom:"Tavern, Popular", upgradeTo:["Tavern, World-Class"], category:["Building","Famous"], itemBonus:"+2 item bonus to Hire Adventurers and Rest and Relax using Trade", effect:"First one built in a turn reduces Unrest by 1d4+1. Bonus to Performance checks to Earn Income, and to Gather Information, while here." },
+  { name:"Tavern, World-Class", level:15, lots:2, cost:{rp:64,lumber:18,luxuries:15,stone:15}, construction:{skill:"Trade",rank:"master",dc:34}, upgradeFrom:"Tavern, Luxury", category:["Building","Edifice","Famous"], itemBonus:"+3 item bonus to Hire Adventurers, Rest and Relax using Trade, and Repair Reputation (Strife)", effect:"First one built in a turn reduces Unrest by 2d4. Bonus to Performance checks to Earn Income, and to Gather Information, while here." },
+  { name:"Temple", level:7, lots:2, cost:{rp:32,lumber:6,stone:6}, construction:{skill:"Folklore",rank:"trained",dc:23}, upgradeFrom:"Shrine", upgradeTo:["Cathedral"], category:["Building","Famous","Infamous"], itemBonus:"+1 item bonus to Celebrate Holiday and Provide Care", effect:"First one built each turn reduces Unrest by 2. Makes higher-level divine items available here (stacks up to 3; doesn't stack with Shrine/Cathedral)." },
+  { name:"Tenement", level:0, lots:1, cost:{rp:1,lumber:1}, construction:{skill:"Industry",rank:null,dc:14}, upgradeTo:["Houses"], category:["Building","Residential"], ruin:"+1 to a Ruin of your choice", effect:"First one built each turn reduces Unrest by 1, at the cost of raising a Ruin track." },
+  { name:"Theater", level:9, lots:2, cost:{rp:24,lumber:8,stone:3}, construction:{skill:"Arts",rank:"expert",dc:26}, upgradeFrom:"Festival Hall", upgradeTo:["Opera House"], category:["Building"], itemBonus:"+2 item bonus to Celebrate Holiday", effect:"First one built each turn reduces Unrest by 1. Bonus to Performance checks to Earn Income while here." },
+  { name:"Thieves' Guild", level:5, lots:1, cost:{rp:25,lumber:4}, construction:{skill:"Intrigue",rank:"trained",dc:20}, category:["Building","Infamous"], itemBonus:"+1 item bonus to Infiltration", ruin:"+1 Crime", effect:"Bonus to Create Forgeries checks while here, at the cost of raising Crime." },
+  { name:"Town Hall", level:2, lots:2, cost:{rp:22,lumber:4,stone:4}, construction:{skill:"Defense/Industry/Magic/Statecraft",rank:"trained",dc:16}, upgradeTo:["Castle"], category:["Building","Edifice"], effect:"First one built each turn reduces Unrest by 1. In the capital, lets leaders take 3 Leadership activities per turn instead of 2." },
+  { name:"Trade Shop", level:3, lots:1, cost:{rp:10,lumber:2}, construction:{skill:"Trade",rank:"trained",dc:18}, upgradeTo:["Guildhall"], category:["Building"], itemBonus:"+1 item bonus to Purchase Commodities", effect:"A trade-specific shop (you choose the trade) — bonus to related Crafting checks while here." },
+  { name:"University", level:15, lots:4, cost:{rp:78,lumber:18,luxuries:18,stone:18}, construction:{skill:"Scholarship",rank:"master",dc:34}, upgradeFrom:"Academy", category:["Building","Edifice","Famous"], itemBonus:"+3 item bonus to Creative Solution", effect:"Bonus to Lore checks to Recall Knowledge, to Research checks, and to Decipher Writing while here." },
+  { name:"Wall, Wooden", level:1, lots:null, cost:{rp:2,lumber:4}, construction:{skill:"Defense",rank:null,dc:15}, upgradeTo:["Wall, Stone"], category:["Infrastructure"], effect:"Built along a settlement border. First one built in each settlement reduces Unrest by 1." },
+  { name:"Wall, Stone", level:5, lots:null, cost:{rp:4,stone:8}, construction:{skill:"Defense",rank:"trained",dc:20}, upgradeFrom:"Wall, Wooden", category:["Infrastructure"], effect:"Built along a settlement border. First one built in each settlement reduces Unrest by 1." },
+  { name:"Watchtower", level:3, lots:1, cost:{rp:12,lumber:4,stone:4}, construction:{skill:"Defense",rank:"trained",dc:18}, category:["Building"], itemBonus:"+1 item bonus to checks made to resolve events affecting the settlement", effect:"First one built each turn reduces Unrest by 1." },
+  { name:"Waterfront", level:8, lots:4, cost:{rp:90,lumber:10}, construction:{skill:"Boating",rank:"expert",dc:24}, upgradeFrom:"Pier", category:["Yard"], itemBonus:"+1 item bonus to Go Fishing, Establish Trade Agreement, and Rest and Relax using Boating", effect:"Must be built next to a Water Border. Raises the settlement's effective level by 1 for item availability." },
+  { name:"Rubble", level:0, lots:1, cost:{}, construction:null, category:["Yard"], effect:"An unbuildable lot left over from a destroyed structure or failed Demolish — must be cleared with a successful Demolish activity before anything else can go there." }
+];
+// Structures buildable directly on a settlement's lot grid: excludes Infrastructure
+// (lots:null — walls/streets/sewers, not lot-bound, and out of scope: no road/adjacency
+// pathing here) and Rubble (construction:null — a Demolish-activity byproduct, not something
+// you build). "Settlement-level requirement" is approximated with kingdom level (state.level)
+// since the app doesn't track a separate numeric settlement level, only the four type tiers —
+// combined with the lot-space filter this stays reasonably in line with a settlement's actual size.
+function buildableStructuresFor(emptyLotsInBlock){
+  return KM_STRUCTURES.filter(st=> st.construction && st.lots!=null && st.lots<=emptyLotsInBlock && st.level<=state.level);
+}
+function structureCategoryClass(def){
+  const cats = (def && def.category) || [];
+  if(cats.includes('Edifice')) return 'cat-blue';
+  if(cats.includes('Residential')) return 'cat-green';
+  return 'cat-gold';
+}
+
+/* ---------- Hex terrain & work sites (GM sets both manually — the app never infers or
+   randomizes terrain). Work Site options are gated by terrain per Establish Work Site
+   (2e.aonprd.com/Actions.aspx?ID=1392): Lumber Camps need forest, Mines/Quarries need hill
+   or mountain. Farmland is a separate activity (Establish Farmland, Actions.aspx?ID=1383)
+   needing plains or hills predominant terrain; it reduces Consumption rather than yielding
+   a stockpiled commodity. ---------- */
+const HEX_WORK_SITES = {
+  'None':        {terrains:null, good:null},
+  'Lumber Camp': {terrains:['Forest'], good:'Lumber'},
+  'Mine':        {terrains:['Hill','Mountain'], good:'Ore'},
+  'Quarry':      {terrains:['Hill','Mountain'], good:'Stone'},
+  'Farmland':    {terrains:['Plains','Hill'], good:null, consumptionReduction:1}
+};
+function workSiteNamesForTerrain(terrain){
+  return Object.keys(HEX_WORK_SITES).filter(name=>{
+    const def = HEX_WORK_SITES[name];
+    return !def.terrains || def.terrains.includes(terrain);
+  });
+}
+
 const HEX_TYPE_SYMBOLS = {
   'Capital':'♜\uFE0E', 'Claimed Territory':'⚑\uFE0E',
   'Settlement':'⌂\uFE0E', 'Friendly Camp':'⚐\uFE0E', 'Enemy Base':'⚔\uFE0E',
@@ -229,6 +361,57 @@ function claimedHexCount(){
   return Object.values(state.hexes).filter(h=>h && CLAIMED_HEX_TYPES.includes(h.type)).length;
 }
 const CONTROL_DC_BY_LEVEL = {1:14,2:15,3:16,4:18,5:20,6:22,7:23,8:24,9:26,10:27,11:28,12:30,13:31,14:32,15:34,16:35,17:36,18:38,19:39,20:40};
+
+/* ---------- Urban Grid — each settlement is a 3x3 grid of blocks (9), each block
+   holding 4 lots (36 lots total). Metropolis settlements get a second identical grid
+   (72 lots total). No road/adjacency/Water-Border pathing here — blocks unlock in a
+   fixed sequential order (0..8) purely as counts, not positions. ---------- */
+function defaultSettlementGrid(){
+  return {
+    blocks: 1,   // unlocked blocks in grid 1 (1-9)
+    blocks2: 0,  // unlocked blocks in grid 2 (0 or 9) — only nonzero once Metropolis
+    lots: Array.from({length:9}, ()=>[null,null,null,null]),
+    lots2: Array.from({length:9}, ()=>[null,null,null,null])
+  };
+}
+function gridBlockFillCount(block){ return block.filter(Boolean).length; }
+function gridAllBlocksMinFill(lots, blockCount, min){
+  for(let i=0;i<blockCount;i++){ if(gridBlockFillCount(lots[i])<min) return false; }
+  return true;
+}
+// Village -> Town -> City -> Metropolis, gated by kingdom level + how full the
+// settlement's current blocks are — see the task brief's exact thresholds.
+function settlementGrowthTarget(s){
+  if(s.type==='Village' && state.level>=3 && gridBlockFillCount(s.grid.lots[0])>=4) return 'Town';
+  if(s.type==='Town' && state.level>=9 && gridAllBlocksMinFill(s.grid.lots, s.grid.blocks, 2)) return 'City';
+  if(s.type==='City' && state.level>=15 && gridAllBlocksMinFill(s.grid.lots, 9, 2)) return 'Metropolis';
+  return null;
+}
+function growSettlementTo(id, targetType, extraBlocks){
+  const s = state.settlements.find(x=>x.id===id);
+  if(!s || settlementGrowthTarget(s)!==targetType) return;
+  if(targetType==='Town') s.grid.blocks = Math.min(9, 1+extraBlocks);
+  else if(targetType==='City') s.grid.blocks = 9;
+  else if(targetType==='Metropolis') s.grid.blocks2 = 9;
+  s.type = targetType;
+  scheduleSave(); renderNotesTab();
+}
+function structureStorageBonus(good){
+  let bonus = 0;
+  const seen = new Set();
+  state.settlements.forEach(s=>{
+    [s.grid.lots, s.grid.lots2].forEach(lots=>{
+      lots.forEach(block=>block.forEach(slot=>{
+        if(!slot || seen.has(slot.g)) return;
+        seen.add(slot.g);
+        const def = KM_STRUCTURES.find(x=>x.name===slot.name);
+        if(def && def.storageBonus && def.storageBonus.good===good) bonus += def.storageBonus.amt;
+      }));
+    });
+  });
+  return bonus;
+}
+function goodStorageCap(g){ return sizeRow(state.size).storage + structureStorageBonus(g); }
 
 /* =====================================================================
    STATE
@@ -361,6 +544,18 @@ function normalizeState(){
   for(const r of ROLES){ if(!state.leaders[r[0]]) state.leaders[r[0]]={name:'',invested:false,vacant:false}; }
   for(const g of GOODS){ if(state.goods[g]===undefined) state.goods[g]=0; }
   if(!state.hexes) state.hexes={};
+  if(!state.settlements) state.settlements = [];
+  state.settlements.forEach(s=>{
+    if(!s.type) s.type = 'Village';
+    if(!s.grid){
+      // migrating a save from before the urban grid existed — give it a grid sized
+      // to roughly match its old freeform type instead of visually demoting it to Village
+      s.grid = defaultSettlementGrid();
+      if(s.type==='Town') s.grid.blocks = 3;
+      else if(s.type==='City'){ s.grid.blocks = 9; }
+      else if(s.type==='Metropolis'){ s.grid.blocks = 9; s.grid.blocks2 = 9; }
+    }
+  });
   if(state.government && !state.creation.government){ state.creation.government = state.government; }
   if(state.heartland && state.heartland.terrain && !state.creation.heartland){ state.creation.heartland = state.heartland.terrain; }
   state.started = true;
@@ -752,13 +947,13 @@ function renderOverview(){
     </div>
 
     <div class="card">
-      <div class="card-head-row"><h3 style="margin-bottom:0;">Commodities</h3><span class="pill">Max ${sz.storage}</span></div>
+      <div class="card-head-row"><h3 style="margin-bottom:0;">Commodities</h3><span class="pill">Base ${sz.storage}</span></div>
       <div class="commod-row">
         ${GOODS.map(g=>`
           <div class="commod-cell">
             <div class="icon">${GOODS_ICON[g]}</div>
             <div class="name">${g}</div>
-            <div class="val">${state.goods[g]}</div>
+            <div class="val">${state.goods[g]}<span style="color:var(--text-muted);font-size:10px;">/${goodStorageCap(g)}</span></div>
           </div>`).join('')}
       </div>
     </div>
@@ -813,6 +1008,12 @@ function renderOverview(){
           <div class="meta">Turn ${l.turn} <span onclick="removeLogEntry(${i})" style="cursor:pointer;color:var(--rust);float:right;">remove</span></div>
           <div class="note">${escapeHtml(l.note)}</div>
         </div>`).join('')}</div>` : `<div class="empty-state" style="margin-top:10px;"><div class="glyph">◇</div>No turns recorded yet.<div class="sub">Log one above to start tracking.</div></div>`}
+    </div>
+
+    <div class="card">
+      <div class="card-head-row"><h3 style="margin-bottom:0;">Work Sites</h3><span class="pill">${Object.values(state.hexes).filter(h=>h&&h.workSite).length} active</span></div>
+      <div class="hint" style="margin-top:0;">Collects this turn's yield from every hex with a Work Site — Lumber Camps, Mines, and Quarries add to your stockpiles (doubled if the hex's Resources field names that commodity), Farmland reduces Consumption. Excess beyond storage caps is lost, per the real upkeep rule. Current Consumption: ${state.consumption}.</div>
+      <button class="action" onclick="processWorkSitesThisTurn()">Process Work Sites</button>
     </div>
 
     <div class="card">
@@ -976,11 +1177,10 @@ function toggleInvest(role, checked){
 
 /* ---------- GOODS ---------- */
 function renderGoods(){
-  const sz = sizeRow(state.size);
-  document.getElementById('storage-note').textContent = `storage limit ${sz.storage} each`;
+  document.getElementById('storage-note').textContent = `base ${sizeRow(state.size).storage}, +storage structures`;
   document.getElementById('goods-list').innerHTML = GOODS.map(g=>`
     <div class="row">
-      <div class="label">${GOODS_ICON[g]} ${g}</div>
+      <div class="label">${GOODS_ICON[g]} ${g}<small>max ${goodStorageCap(g)}</small></div>
       <div class="stepper">
         <button onclick="goodsAdjust('${g}',-1)">−</button>
         <div class="amt mono">${state.goods[g]}</div>
@@ -989,9 +1189,36 @@ function renderGoods(){
     </div>`).join('');
 }
 function goodsAdjust(g, delta){
-  const sz = sizeRow(state.size);
-  state.goods[g] = Math.max(0, Math.min(sz.storage, state.goods[g]+delta));
+  state.goods[g] = Math.max(0, Math.min(goodStorageCap(g), state.goods[g]+delta));
   scheduleSave(); render();
+}
+// Upkeep Phase resource collection (2e.aonprd.com/Rules.aspx?ID=1795): "You gain 1
+// Commodity from each Work Site, or double that if the Work Site is in a Resource hex."
+// We treat a hex as a Resource hex for a given commodity if its freeform Resources field
+// mentions that commodity by name. Farmland isn't a commodity work site (Establish Farmland,
+// Actions.aspx?ID=1383) — it reduces Consumption by 1 per hex instead.
+function processWorkSitesThisTurn(){
+  const gains = {};
+  let consumptionReduced = 0;
+  Object.values(state.hexes).forEach(h=>{
+    if(!h || !h.workSite) return;
+    const def = HEX_WORK_SITES[h.workSite];
+    if(!def) return;
+    if(def.good){
+      const isResourceHex = !!(h.resources && h.resources.toLowerCase().includes(def.good.toLowerCase()));
+      const yieldAmt = isResourceHex ? 2 : 1;
+      const before = state.goods[def.good];
+      state.goods[def.good] = Math.min(goodStorageCap(def.good), before + yieldAmt);
+      gains[def.good] = (gains[def.good]||0) + (state.goods[def.good] - before);
+    }
+    if(def.consumptionReduction) consumptionReduced += def.consumptionReduction;
+  });
+  if(consumptionReduced>0) state.consumption = Math.max(0, state.consumption - consumptionReduced);
+  scheduleSave();
+  render();
+  const parts = Object.keys(gains).filter(g=>gains[g]>0).map(g=>`+${gains[g]} ${g}`);
+  if(consumptionReduced>0) parts.push(`Consumption −${consumptionReduced}`);
+  alert(parts.length ? `Work sites produced: ${parts.join(', ')}.` : 'No Work Sites produced anything this turn — check hex assignments and storage caps.');
 }
 function ruinAdjust(name, delta){
   const r = state.ruin[name];
@@ -1133,7 +1360,7 @@ function removeLogEntry(i){ state.log.splice(i,1); scheduleSave(); render(); }
 /* ---------- SETTLEMENTS ---------- */
 function addSettlement(){
   const id = Date.now();
-  state.settlements.push({id, name:'New Settlement', type:'Village', structures:[]});
+  state.settlements.push({id, name:'New Settlement', type:'Village', grid:defaultSettlementGrid()});
   scheduleSave(); render();
   // send them straight to the map to place it, so it isn't a "floating" settlement with nowhere shown
   startPickLocation(id);
@@ -1149,17 +1376,6 @@ function removeSettlement(id){
   state.settlements = state.settlements.filter(s=>s.id!==id);
   scheduleSave(); render();
 }
-function addStructure(id, val){
-  if(!val.trim()) return;
-  const s = state.settlements.find(x=>x.id===id);
-  s.structures.push(val.trim());
-  scheduleSave(); render();
-}
-function removeStructure(id, idx){
-  const s = state.settlements.find(x=>x.id===id);
-  s.structures.splice(idx,1);
-  scheduleSave(); render();
-}
 function renameSettlement(id, val){
   const s = state.settlements.find(s=>s.id===id);
   if(s.col!==undefined && s.row!==undefined){
@@ -1172,7 +1388,110 @@ function renameSettlement(id, val){
   scheduleSave();
   renderNotesTab();
 }
-function retypeSettlement(id, val){ state.settlements.find(s=>s.id===id).type = val; scheduleSave(); }
+
+/* ---------- lot placement / upgrade / removal ---------- */
+function lotsForGrid(s, gridNum){ return gridNum===2 ? s.grid.lots2 : s.grid.lots; }
+function openLotPicker(sid, gridNum, blockIdx){
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  const block = lotsForGrid(s, gridNum)[blockIdx];
+  const emptyCount = block.filter(v=>!v).length;
+  const options = buildableStructuresFor(emptyCount);
+  const overlay = document.createElement('div');
+  overlay.id = 'lot-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>Build in ${escapeHtml(s.name)}</h3>
+    <div class="hint" style="margin-top:0;">This block has ${emptyCount} open lot${emptyCount===1?'':'s'}. Structures that fit:</div>
+    <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
+      ${options.length ? options.map(st=>`
+        <button type="button" class="option-card" onclick="placeStructureInLot(${sid},${gridNum},${blockIdx},'${escapeAttr(st.name)}')">
+          <div class="opt-name">${escapeHtml(st.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${st.lots} lot${st.lots>1?'s':''})</span></div>
+          <div class="opt-detail">${escapeHtml(st.effect)}</div>
+        </button>`).join('') : `<div class="hint" style="margin-top:0;">Nothing fits here yet — needs more open lots in this block, or a higher kingdom level.</div>`}
+    </div>
+    <button class="ghost" style="margin-top:8px;" onclick="closeLotOverlay()">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function placeStructureInLot(sid, gridNum, blockIdx, structureName){
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  const st = KM_STRUCTURES.find(x=>x.name===structureName);
+  if(!st || st.lots==null) return;
+  const block = lotsForGrid(s, gridNum)[blockIdx];
+  const emptyIdxs = block.map((v,i)=>v?-1:i).filter(i=>i!==-1);
+  if(emptyIdxs.length < st.lots) return;
+  const g = 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  for(let i=0;i<st.lots;i++) block[emptyIdxs[i]] = {name:structureName, g};
+  closeLotOverlay();
+  scheduleSave();
+  renderNotesTab();
+}
+function openLotInfoPopup(sid, gridNum, blockIdx, groupId){
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  const block = lotsForGrid(s, gridNum)[blockIdx];
+  const slot = block.find(v=>v && v.g===groupId);
+  if(!slot) return;
+  const def = KM_STRUCTURES.find(x=>x.name===slot.name);
+  const currentLots = block.filter(v=>v && v.g===groupId).length;
+  const emptyCount = block.filter(v=>!v).length;
+  const upgradeOptions = ((def && def.upgradeTo) || [])
+    .map(n=>KM_STRUCTURES.find(x=>x.name===n)).filter(u=>u && u.level<=state.level);
+  const overlay = document.createElement('div');
+  overlay.id = 'lot-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <h3>${escapeHtml(slot.name)}</h3>
+    ${def ? `<div class="hint" style="margin-top:0;">${escapeHtml(def.effect)}</div>` : ''}
+    ${upgradeOptions.length ? `
+      <div class="hint" style="margin:10px 0 4px;">Upgrade to:</div>
+      ${upgradeOptions.map(u=>{
+        const need = Math.max(0, u.lots - currentLots);
+        const fits = need<=emptyCount;
+        return `<button type="button" class="option-card" ${fits?'':'style="opacity:.45;pointer-events:none;"'} onclick="upgradeStructureGroup(${sid},${gridNum},${blockIdx},'${groupId}','${escapeAttr(u.name)}')">
+          <div class="opt-name">${escapeHtml(u.name)}</div>
+          <div class="opt-detail">${escapeHtml(u.effect)}${fits?'':' — not enough open lots in this block'}</div>
+        </button>`;
+      }).join('')}` : ''}
+    <button class="ghost danger-ghost" style="margin-top:10px;" onclick="removeStructureGroup(${sid},${gridNum},'${groupId}');closeLotOverlay();">Remove</button>
+    <button class="ghost" style="margin-top:8px;" onclick="closeLotOverlay()">Close</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function upgradeStructureGroup(sid, gridNum, blockIdx, groupId, newName){
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  const block = lotsForGrid(s, gridNum)[blockIdx];
+  const oldSlots = [];
+  block.forEach((v,i)=>{ if(v && v.g===groupId) oldSlots.push(i); });
+  const newDef = KM_STRUCTURES.find(x=>x.name===newName);
+  if(!oldSlots.length || !newDef) return;
+  const need = newDef.lots - oldSlots.length;
+  if(need>0){
+    const emptyIdxs = block.map((v,i)=>v?-1:i).filter(i=>i!==-1);
+    if(emptyIdxs.length<need){ alert('Not enough open lots in this block to upgrade to '+newName+'.'); return; }
+    for(let i=0;i<need;i++){ block[emptyIdxs[i]] = {name:newName, g:groupId}; oldSlots.push(emptyIdxs[i]); }
+  } else if(need<0){
+    for(let i=0;i<(-need);i++){ block[oldSlots.pop()] = null; }
+  }
+  oldSlots.forEach(i=>{ if(block[i]) block[i].name = newName; });
+  closeLotOverlay();
+  scheduleSave();
+  renderNotesTab();
+}
+function removeStructureGroup(sid, gridNum, groupId){
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  lotsForGrid(s, gridNum).forEach(block=>block.forEach((v,i)=>{ if(v && v.g===groupId) block[i]=null; }));
+  scheduleSave();
+  renderNotesTab();
+}
+function closeLotOverlay(){
+  const el = document.getElementById('lot-overlay');
+  if(el) el.remove();
+}
 
 let pickingForSettlement = null;
 let pickingCapital = false;
@@ -1221,7 +1540,7 @@ function confirmPick(){
 function pinCapitalLocation(col,row){
   const key = hexKey(col,row);
   const existing = state.hexes[key] || {note:''};
-  state.hexes[key] = {name: state.name, type:'Capital', note: existing.note||'', resources: existing.resources||'', features: existing.features||''};
+  state.hexes[key] = {name: state.name, type:'Capital', note: existing.note||'', resources: existing.resources||'', features: existing.features||'', terrain: existing.terrain||'', workSite: existing.workSite||''};
   cancelPickLocation();
   scheduleSave();
   updateHexMarkers();
@@ -1248,8 +1567,8 @@ function pinSettlementLocation(col,row){
   }
   s.col = col; s.row = row;
   const key = hexKey(col,row);
-  const existing = state.hexes[key] || {name:'',type:'',note:'',resources:'',features:''};
-  state.hexes[key] = {name: s.name, type:'Settlement', note: existing.note||'', resources: existing.resources||'', features: existing.features||''};
+  const existing = state.hexes[key] || {name:'',type:'',note:'',resources:'',features:'',terrain:'',workSite:''};
+  state.hexes[key] = {name: s.name, type:'Settlement', note: existing.note||'', resources: existing.resources||'', features: existing.features||'', terrain: existing.terrain||'', workSite: existing.workSite||''};
   scheduleSave();
   updateHexMarkers();
   renderNotesTab();
@@ -1257,15 +1576,47 @@ function pinSettlementLocation(col,row){
   render();
 }
 
+function renderUrbanGrid(s, gridNum){
+  const unlockedCount = gridNum===2 ? s.grid.blocks2 : s.grid.blocks;
+  const lots = lotsForGrid(s, gridNum);
+  let html = '<div class="urban-grid">';
+  for(let bi=0; bi<9; bi++){
+    if(bi>=unlockedCount){
+      html += `<div class="ug-block locked"><div class="ug-locked">locked</div></div>`;
+      continue;
+    }
+    html += `<div class="ug-block">`;
+    lots[bi].forEach(slot=>{
+      if(slot){
+        const def = KM_STRUCTURES.find(x=>x.name===slot.name);
+        html += `<div class="ug-lot filled ${structureCategoryClass(def)}" onclick="openLotInfoPopup(${s.id},${gridNum},${bi},'${slot.g}')" title="${escapeAttr(slot.name)}">${escapeHtml(slot.name)}</div>`;
+      } else {
+        html += `<div class="ug-lot empty" onclick="openLotPicker(${s.id},${gridNum},${bi})" title="Build here">+</div>`;
+      }
+    });
+    html += `</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+function renderGrowthPanel(s){
+  const target = settlementGrowthTarget(s);
+  if(!target) return '';
+  if(target==='Town'){
+    return `<div class="hint" style="margin-top:10px;">Ready to grow to Town — choose how many additional blocks to unlock (2–4):</div>
+      <div style="display:flex;gap:6px;margin-top:4px;">
+        ${[2,3,4].map(n=>`<button class="ghost" style="width:auto;flex:1;" onclick="growSettlementTo(${s.id},'Town',${n})">+${n} blocks</button>`).join('')}
+      </div>`;
+  }
+  return `<button class="action" style="margin-top:10px;" onclick="growSettlementTo(${s.id},'${target}')">Grow to ${target}</button>`;
+}
 function renderSettlementsList(){
   document.getElementById('settlements-list').innerHTML = state.settlements.map(s=>`
     <div class="settlement">
       <div class="settlement-head">
         <input type="text" value="${escapeAttr(s.name)}" style="font-family:'Cinzel',serif;font-weight:600;background:none;border:none;font-size:16px;padding:0;flex:1;"
           onchange="renameSettlement(${s.id}, this.value)">
-        <select class="type-select" style="width:auto;" onchange="retypeSettlement(${s.id}, this.value)">
-          ${['Village','Town','City','Metropolis'].map(t=>`<option ${s.type===t?'selected':''}>${t}</option>`).join('')}
-        </select>
+        <span class="pill">${s.type}</span>
       </div>
       <div class="settlement-loc">
         ${s.col!==undefined ? `
@@ -1276,12 +1627,10 @@ function renderSettlementsList(){
           <button class="loc-link" onclick="startPickLocation(${s.id})">⌖ Set location on map</button>
         `}
       </div>
-      <div>${s.structures.map((st,idx)=>`<span class="tag">${escapeHtml(st)}<button onclick="removeStructure(${s.id},${idx})">✕</button></span>`).join('')}</div>
-      <div class="tag-input-row">
-        <input class="wide" type="text" placeholder="Add structure (e.g. Granary)" id="struct-in-${s.id}">
-        <button class="action" style="width:auto;margin:0;" onclick="addStructure(${s.id}, document.getElementById('struct-in-${s.id}').value); document.getElementById('struct-in-${s.id}').value='';">Add</button>
-      </div>
-      <button class="ghost danger-ghost" style="margin-top:8px;" onclick="removeSettlement(${s.id})">Remove settlement</button>
+      ${renderUrbanGrid(s, 1)}
+      ${s.grid.blocks2>0 ? `<div class="hint" style="margin:10px 0 4px;">Second grid</div>${renderUrbanGrid(s, 2)}` : ''}
+      ${renderGrowthPanel(s)}
+      <button class="ghost danger-ghost" style="margin-top:10px;" onclick="removeSettlement(${s.id})">Remove settlement</button>
     </div>`).join('') || '<div class="hint">No settlements founded yet.</div>';
 }
 
@@ -1582,13 +1931,15 @@ function openHexPanel(col,row){
     const poly = svg.querySelector(`[data-key="${activeHexKey}"]`);
     if(poly) poly.classList.add('selected');
   }
-  const h = state.hexes[activeHexKey] || {name:'',type:'',note:'',resources:'',features:''};
+  const h = state.hexes[activeHexKey] || {name:'',type:'',note:'',resources:'',features:'',terrain:'',workSite:''};
   document.getElementById('hex-panel-title').textContent = 'Hex '+hexLabel(col,row);
   document.getElementById('hex-name').value = h.name||'';
   document.getElementById('hex-type').value = h.type||'';
   document.getElementById('hex-resources').value = h.resources||'';
   document.getElementById('hex-features').value = h.features||'';
   document.getElementById('hex-note').value = h.note||'';
+  document.getElementById('hex-terrain').value = h.terrain||'';
+  populateWorkSiteSelect(h.workSite||'');
   document.getElementById('hex-panel').classList.add('open');
 }
 function closeHexPanel(){
@@ -1597,6 +1948,18 @@ function closeHexPanel(){
   activeHexKey = null;
   document.getElementById('hex-panel').classList.remove('open');
 }
+function populateWorkSiteSelect(preserveValue){
+  const terrain = document.getElementById('hex-terrain').value;
+  const names = workSiteNamesForTerrain(terrain);
+  const keep = names.includes(preserveValue) ? preserveValue : 'None';
+  document.getElementById('hex-worksite').innerHTML = names.map(n=>{
+    const val = n==='None' ? '' : n;
+    return `<option value="${val}" ${n===keep?'selected':''}>${n}</option>`;
+  }).join('');
+}
+function onHexTerrainChange(){
+  populateWorkSiteSelect(document.getElementById('hex-worksite').value || 'None');
+}
 function saveHex(){
   if(!activeHexKey) return;
   const name = document.getElementById('hex-name').value.trim();
@@ -1604,10 +1967,12 @@ function saveHex(){
   const resources = document.getElementById('hex-resources').value.trim();
   const features = document.getElementById('hex-features').value.trim();
   const note = document.getElementById('hex-note').value.trim();
-  if(!name && !type && !note && !resources && !features){
+  const terrain = document.getElementById('hex-terrain').value;
+  const workSite = document.getElementById('hex-worksite').value;
+  if(!name && !type && !note && !resources && !features && !terrain && !workSite){
     delete state.hexes[activeHexKey];
   } else {
-    state.hexes[activeHexKey] = {name,type,note,resources,features};
+    state.hexes[activeHexKey] = {name,type,note,resources,features,terrain,workSite};
   }
   scheduleSave();
   updateHexMarkers();
@@ -1630,7 +1995,7 @@ function renderNotesTab(){
   const typeOrder = Object.keys(HEX_TYPE_SYMBOLS);
   const entries = Object.keys(state.hexes)
     .map(key=>{ const [col,row] = key.split('_').map(Number); return {key, col, row, ...state.hexes[key]}; })
-    .filter(e=>e.name || e.type || e.note || e.resources || e.features)
+    .filter(e=>e.name || e.type || e.note || e.resources || e.features || e.terrain || e.workSite)
     .sort((a,b)=>{
       const ta = typeOrder.indexOf(a.type), tb = typeOrder.indexOf(b.type);
       if(ta !== tb) return (ta===-1?999:ta) - (tb===-1?999:tb);
@@ -1642,7 +2007,7 @@ function renderNotesTab(){
   }
   list.innerHTML = entries.map(e=>{
     const symbol = e.type && HEX_TYPE_SYMBOLS[e.type] ? HEX_TYPE_SYMBOLS[e.type] : '·';
-    const tags = [e.resources ? 'Resources: '+e.resources : '', e.features ? 'Features: '+e.features : ''].filter(Boolean).join(' · ');
+    const tags = [e.terrain ? 'Terrain: '+e.terrain : '', e.workSite ? 'Work Site: '+e.workSite : '', e.resources ? 'Resources: '+e.resources : '', e.features ? 'Features: '+e.features : ''].filter(Boolean).join(' · ');
     return `<button class="note-item" onclick="jumpToHex(${e.col},${e.row})">
       <span class="note-dot">${symbol}</span>
       <span class="note-body">

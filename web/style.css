@@ -307,3 +307,20 @@
   .empty-state{text-align:center;padding:18px 8px;color:var(--text-muted);}
   .empty-state .glyph{font-size:22px;color:var(--gold-dim);margin-bottom:6px;}
   .empty-state .sub{font-size:11px;margin-top:3px;}
+
+  /* ---------- urban grid (settlement lots) ---------- */
+  .urban-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;}
+  .ug-block{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px;}
+  .ug-block.locked{background:none;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;padding:10px 2px;}
+  .ug-locked{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;}
+  .ug-lot{
+    aspect-ratio:1;min-height:30px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+    text-align:center;font-size:8px;line-height:1.15;padding:2px;cursor:pointer;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .ug-lot.empty{background:none;border:1px dashed var(--border);color:var(--text-muted);font-size:14px;}
+  .ug-lot.empty:active{background:var(--surface-raised);}
+  .ug-lot.filled{border:1px solid transparent;font-weight:600;}
+  .ug-lot.cat-gold{background:rgba(201,162,75,0.16);color:var(--gold);border-color:var(--gold-dim);}
+  .ug-lot.cat-green{background:rgba(92,139,114,0.2);color:var(--forest);border-color:var(--forest);}
+  .ug-lot.cat-blue{background:rgba(91,135,166,0.2);color:var(--blue);border-color:var(--blue);}
