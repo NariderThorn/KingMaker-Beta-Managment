@@ -981,6 +981,54 @@ function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, c=>({'&':'&amp;',
 function escapeAttr(str){ return escapeHtml(str); }
 
 /* =====================================================================
+   TAP-TO-EXPLAIN — one consistent pattern for "what does this mean"
+   across the whole app: a small ⓘ next to a term opens a centered card
+   with a short explanation, tap anywhere to dismiss. Reused everywhere
+   instead of a different treatment per screen.
+===================================================================== */
+const INFO_TIPS = {
+  Culture:  'One of the four kingdom abilities. Governs Arts, Folklore, Magic, and Scholarship; its Ruin is Corruption.',
+  Economy:  'One of the four kingdom abilities. Governs Boating, Exploration, Industry, and Trade; its Ruin is Crime.',
+  Loyalty:  'One of the four kingdom abilities. Governs Intrigue, Politics, Statecraft, and Warfare; its Ruin is Strife.',
+  Stability:'One of the four kingdom abilities. Governs Agriculture, Defense, Engineering, and Wilderness; its Ruin is Decay.',
+  Corruption:'Ruin from decadence, vice, and moral decline. Linked to Culture — high Corruption drags down Culture-based checks.',
+  Crime:    'Ruin from lawlessness and criminal enterprise. Linked to Economy — high Crime drags down Economy-based checks.',
+  Decay:    'Ruin from neglected infrastructure and civic rot. Linked to Stability — high Decay drags down Stability-based checks.',
+  Strife:   'Ruin from discord, factionalism, and conflict. Linked to Loyalty — high Strife drags down Loyalty-based checks.',
+  'Control DC': "The difficulty for most kingdom-wide checks — your kingdom level's base DC, adjusted by its Size.",
+  RP: 'Resource Points — the kingdom\'s spendable resource. Refilled by Resource Dice each turn (Upkeep), spent on structures, Work Sites, army gear, and recruitment/training costs.',
+  Unrest: 'Kingdom-wide unhappiness. High Unrest imposes a penalty on kingdom skill checks and, at 10+, causes Ruin to accumulate each Upkeep.',
+  Consumption: "Food owed each turn during Upkeep. Paid from the Food stockpile; unpaid Consumption costs 5 RP per point or raises Unrest by 1d4.",
+  Ruler: 'Leadership role tied to Loyalty — traditionally the head of state.', Counselor: 'Leadership role tied to Culture — the voice of scholars, priests, and advisors.',
+  General: 'Leadership role tied to Stability — commands the kingdom\'s military affairs.', Emissary: 'Leadership role tied to Loyalty — the kingdom\'s face in diplomacy.',
+  Magister: 'Leadership role tied to Culture — oversees arcane and magical matters.', Treasurer: 'Leadership role tied to Economy — manages the kingdom\'s finances.',
+  Viceroy: 'Leadership role tied to Economy — administers frontier and outlying territory.', Warden: 'Leadership role tied to Stability — protects the kingdom\'s borders and settlements.',
+  Scouting: "An army's initiative modifier for a war encounter — also sets the DC (Scouting+10) for enemies to detect it while ambushing.",
+  Maneuver: "An army's save against tactical, positioning, and physical effects — used for most non-attack war actions.",
+  Morale: "An army's save against having its cohesion or will to fight undermined — used to resist Rout when at/below its Rout Threshold.",
+  'Rout Threshold': "HP level (usually half an army's max HP) at or below which it must make a Morale check after each round or start routing.",
+  Efficient: 'A condition granted by a critical success on most Army Activities — lets the army take a second Army Activity immediately, at a −5 penalty, or reduce another condition by 1.',
+  Shaken: "A worsening condition — each point penalizes Morale checks. An army becomes routed at Shaken 4.",
+  Weary: "A worsening condition — each point penalizes AC and Maneuver checks (and doubles the penalty on Deploy).",
+  Mired: "A worsening condition — each point penalizes Maneuver checks. An army becomes pinned at Mired 4."
+};
+function showInfoTip(term){
+  const text = INFO_TIPS[term] || 'No description available yet.';
+  const overlay = document.createElement('div');
+  overlay.id = 'info-tip-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:120;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:320px;width:100%;margin:0;">
+    <h3 style="margin-bottom:6px;">${escapeHtml(term)}</h3>
+    <div class="hint" style="margin-top:0;">${escapeHtml(text)}</div>
+  </div>`;
+  overlay.addEventListener('click', ()=>overlay.remove());
+  document.body.appendChild(overlay);
+}
+function infoIcon(term){
+  return `<span class="info-icon" onclick="event.stopPropagation();showInfoTip('${escapeAttr(term)}')" title="What's this?">ⓘ</span>`;
+}
+
+/* =====================================================================
    BOOT — the kingdom picker shows every launch; opening one enters the app
 ===================================================================== */
 function showKingdomPicker(){
@@ -1256,10 +1304,10 @@ function renderOverview(){
 
     <div class="stat-grid">
       <div class="seal"><div class="val mono">${state.level}</div><div class="lbl">Level</div><div class="sub">${state.xp} XP</div></div>
-      <div class="seal"><div class="val mono">${totalDC}</div><div class="lbl">Control DC</div><div class="sub">${sz.type}</div></div>
+      <div class="seal"><div class="val mono">${totalDC}</div><div class="lbl">Control DC${infoIcon('Control DC')}</div><div class="sub">${sz.type}</div></div>
       <div class="seal"><div class="val mono">${state.size}</div><div class="lbl">Size</div><div class="sub">hexes</div></div>
-      <div class="seal"><div class="val mono">${state.rp}</div><div class="lbl">RP</div><div class="sub">${sz.die}×${diceCount}${featResourceDieBonus()?`+${featResourceDieBonus()}`:''}/turn</div></div>
-      <div class="seal"><div class="val mono">${state.unrest}</div><div class="lbl">Unrest</div><div class="sub">${unrestPenalty(state.unrest)<0?fmt(unrestPenalty(state.unrest))+' checks':'no penalty'}</div></div>
+      <div class="seal"><div class="val mono">${state.rp}</div><div class="lbl">RP${infoIcon('RP')}</div><div class="sub">${sz.die}×${diceCount}${featResourceDieBonus()?`+${featResourceDieBonus()}`:''}/turn</div></div>
+      <div class="seal"><div class="val mono">${state.unrest}</div><div class="lbl">Unrest${infoIcon('Unrest')}</div><div class="sub">${unrestPenalty(state.unrest)<0?fmt(unrestPenalty(state.unrest))+' checks':'no penalty'}</div></div>
       <div class="seal"><div class="val mono">${state.fame}</div><div class="lbl">${state.fameType}</div><div class="sub">of ${state.fameMax}</div></div>
     </div>
 
@@ -1403,7 +1451,7 @@ function renderAbilities(){
     return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
-          <h3 style="margin-bottom:2px;">${a}</h3>
+          <h3 style="margin-bottom:2px;">${a}${infoIcon(a)}</h3>
         </div>
         <div style="text-align:right;">
           <span class="mono" style="font-size:22px;color:var(--text);font-family:'Cinzel',serif;font-weight:700;">${score}</span>
@@ -1415,7 +1463,7 @@ function renderAbilities(){
       ).join('')}</div>` : `<div class="hint" style="margin-top:6px;">No boosts yet.</div>`}
 
       <div class="row" style="margin-top:12px;">
-        <div class="label" style="display:flex;align-items:center;gap:6px;"><span style="color:var(--rust);">†</span>${rn}</div>
+        <div class="label" style="display:flex;align-items:center;gap:6px;"><span style="color:var(--rust);">†</span>${rn}${infoIcon(rn)}</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="mono" style="font-size:12px;color:${effPenalty?'var(--rust)':'var(--text-muted)'};">${ruin.points}/${ruin.threshold}${effPenalty?` (${fmt(-effPenalty)})`:''}</span>
           <div class="stepper">
@@ -1459,7 +1507,7 @@ function renderLeaders(){
     const showCustomInput = customNameRoles.has(role) || (l.name && !isPreset);
     return `<div class="row" style="flex-direction:column;align-items:stretch;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div class="label">${role}<small>key ability: ${ab}</small></div>
+        <div class="label">${role}${infoIcon(role)}<small>key ability: ${ab}</small></div>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);">
           <input type="checkbox" ${l.invested?'checked':''} onchange="toggleInvest('${role}',this.checked)"> invested
         </label>
@@ -1963,22 +2011,22 @@ function applyUpkeepWorkSites(){
 function renderUpkeepConsumptionStep(){
   const u = state.turnUpkeep;
   if(u.consumption){
-    if(u.consumption.skipped) return `<h3>5. Consumption</h3><div class="hint" style="margin-top:0;">Skipped for now.</div>${upkeepNav(false)}`;
+    if(u.consumption.skipped) return `<h3>5. Consumption${infoIcon('Consumption')}</h3><div class="hint" style="margin-top:0;">Skipped for now.</div>${upkeepNav(false)}`;
     const c = u.consumption;
     let detail = `Owed ${c.owed} Food, paid ${c.paidFromFood} from stockpile.`;
     if(c.shortfall) detail += c.choice==='rp' ? ` Spent ${c.shortfall*5} RP for the ${c.shortfall} unpaid.` : ` Gained ${c.unrestGain} Unrest for the ${c.shortfall} unpaid.`;
-    return `<h3>5. Consumption</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
+    return `<h3>5. Consumption${infoIcon('Consumption')}</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
   }
   const owed = effectiveConsumptionOwed();
   const available = state.goods.Food;
   const shortfall = Math.max(0, owed-available);
   if(shortfall===0){
-    return `<h3>5. Consumption</h3>
+    return `<h3>5. Consumption${infoIcon('Consumption')}</h3>
       <div class="hint" style="margin-top:0;">Owed ${owed} Food (base ${state.consumption}, reduced by storage-bonus structures and Farmland hexes). You have ${available} — fully covered.</div>
       <button class="action" onclick="applyUpkeepConsumption(${owed},${owed},0,null,0)">Pay ${owed} Food</button>
       ${upkeepNav(true)}`;
   }
-  return `<h3>5. Consumption</h3>
+  return `<h3>5. Consumption${infoIcon('Consumption')}</h3>
     <div class="hint" style="margin-top:0;">Owed ${owed} Food, you have ${available} — a shortfall of ${shortfall}. Per the rules, for the unpaid amount you either spend 5 RP per point or increase Unrest by 1d4 (not per point — one roll covers the whole shortfall).</div>
     <button class="ghost" ${state.rp<shortfall*5?'style="opacity:.45;pointer-events:none;"':''} onclick="chooseUpkeepConsumptionShortfall(${owed},${available},${shortfall})">Spend ${shortfall*5} RP (have ${state.rp})</button>
     <div class="hint" style="margin:10px 0 4px;">Or roll 1d4 and add it to Unrest:</div>
@@ -3227,15 +3275,18 @@ function renderArmyCard(army){
       ${locLabel ? `<span class="loc-pin">⌖ ${locLabel}</span><button class="loc-link" onclick="jumpToHex(${army.col},${army.row})">view</button>` : `<span class="hint" style="margin:0;">Not deployed</span>`}
     </div>
     <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin:10px 0;">
-      <div class="seal"><div class="val mono">${army.hp}/${maxHp}</div><div class="lbl">HP</div><div class="sub">RT ${rt}</div></div>
+      <div class="seal"><div class="val mono">${army.hp}/${maxHp}</div><div class="lbl">HP</div><div class="sub">RT ${rt}${infoIcon('Rout Threshold')}</div></div>
       <div class="seal"><div class="val mono">${ac}</div><div class="lbl">AC</div></div>
-      <div class="seal"><div class="val mono">${fmt(stats.maneuver)}</div><div class="lbl">Maneuver</div></div>
-      <div class="seal"><div class="val mono">${fmt(stats.morale)}</div><div class="lbl">Morale</div></div>
+      <div class="seal"><div class="val mono">${fmt(stats.maneuver)}</div><div class="lbl">Maneuver${infoIcon('Maneuver')}</div></div>
+      <div class="seal"><div class="val mono">${fmt(stats.morale)}</div><div class="lbl">Morale${infoIcon('Morale')}</div></div>
     </div>
     <div class="hint" style="margin-top:0;">Scouting ${fmt(stats.scouting)} · Attack ${fmt(atk)} (${stats.attackKind}) · Consumption ${stats.consumption}${belowRT?' · <span style="color:var(--rust);">at/below Rout Threshold</span>':''}</div>
     <div class="hint" style="margin-top:4px;">Tactics: ${army.tactics.length?escapeHtml(army.tactics.join(', ')):'none'}</div>
     <div class="hint" style="margin-top:2px;">Gear: ${army.gear.length?escapeHtml(army.gear.join(', ')):'none'}</div>
-    ${condParts.length ? `<div class="ability-tags" style="margin-top:6px;">${condParts.map(c=>`<span class="ability-tag neg">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+    ${condParts.length ? `<div class="ability-tags" style="margin-top:6px;">${condParts.map(c=>{
+      const term = c.split(' ')[0];
+      return INFO_TIPS[term] ? `<span class="ability-tag neg" style="cursor:pointer;" onclick="showInfoTip('${escapeAttr(term)}')">${escapeHtml(c)}</span>` : `<span class="ability-tag neg">${escapeHtml(c)}</span>`;
+    }).join('')}</div>` : ''}
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
       <button class="small-ghost" ${armyActivityAvailable(army)?'':'style="opacity:.4;pointer-events:none;"'} onclick="openArmyActivityPicker('${army.id}')">${armyActivityAvailable(army)?'Army Activity':'Activity used'}</button>
       <button class="small-ghost" onclick="startPickArmyLocation('${army.id}')">Deploy</button>

@@ -210,6 +210,8 @@
   .ability-tag.pos{background:rgba(92,139,114,0.18);color:#8fbf9e;}
   .ability-tag.neg{background:rgba(177,92,66,0.18);color:#d99a82;}
   .skill-source-icon{color:var(--gold-dim);font-size:11px;margin-left:5px;}
+  .info-icon{color:var(--gold-dim);font-size:11px;margin-left:4px;cursor:pointer;border:1px solid var(--gold-dim);border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;line-height:1;vertical-align:middle;}
+  .info-icon:active{background:rgba(201,162,75,0.15);}
 
   .note-item{
     display:flex;gap:10px;padding:11px 4px;border-bottom:1px solid var(--border);
