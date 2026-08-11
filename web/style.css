@@ -271,6 +271,11 @@
   }
   .kingdom-row-open:active{background:var(--surface-raised);}
   .kingdom-row.current .kingdom-row-open{border-color:var(--gold);background:rgba(201,162,75,0.08);}
+  .kingdom-row-export{
+    flex:0 0 44px;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    color:var(--gold);font-size:16px;cursor:pointer;
+  }
+  .kingdom-row-export:active{background:rgba(201,162,75,0.12);}
   .kingdom-row-delete{
     flex:0 0 44px;background:var(--surface);border:1px solid var(--border);border-radius:10px;
     color:var(--rust);font-size:16px;cursor:pointer;

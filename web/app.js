@@ -46,27 +46,40 @@ const HEARTLAND_BOOSTS = {
 // it if this ever moves to a different repository.
 const APP_VERSION = 'v1.2.0';
 const GITHUB_REPO = 'NariderThorn/KingMaker-Beta-Managment';
-async function checkForUpdate(){
-  const btn = document.getElementById('update-check-btn');
-  const resultEl = document.getElementById('update-check-result');
-  if(btn){ btn.textContent = 'Checking…'; btn.disabled = true; }
+
+/* update status cache — checked once per session from loadState(), then just
+   read back on every picker render. See renderUpdateSection() below. */
+let updateCheck = {status:'checking', tag:null};
+let updateCheckedThisSession = false;
+function isKingdomPickerVisible(){
+  const el = document.getElementById('creation-screen');
+  return !!el && el.style.display!=='none' && creationStep===0;
+}
+async function checkForUpdateOnce(){
+  if(updateCheckedThisSession) return;
+  updateCheckedThisSession = true;
   try{
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
     if(!res.ok) throw new Error('request failed');
     const data = await res.json();
     if(!data.tag_name) throw new Error('no release found');
-    if(data.tag_name === APP_VERSION){
-      resultEl.textContent = `You're on the latest version (${APP_VERSION}).`;
-    } else {
-      resultEl.innerHTML = `A newer version is available: <b>${escapeHtml(data.tag_name)}</b>. <a href="${escapeAttr(data.html_url)}" target="_blank" rel="noopener">Open the release to download it</a> — installing it over this app keeps all your kingdoms.`;
-    }
+    updateCheck = (data.tag_name === APP_VERSION)
+      ? {status:'current', tag:data.tag_name}
+      : {status:'available', tag:data.tag_name};
   }catch(e){
-    resultEl.textContent = "Couldn't check for updates — check your connection and try again.";
+    updateCheck = {status:'error', tag:null};
   }
-  if(btn){ btn.textContent = 'Check for update'; btn.disabled = false; }
+  if(isKingdomPickerVisible()) renderCreationScreen();
 }
 function isHotUpdated(){
   try{ return !!localStorage.getItem('hotupdate-app-js'); }catch(e){ return false; }
+}
+function renderUpdateStatusLine(){
+  if(updateCheck.status==='checking') return 'Checking…';
+  if(updateCheck.status==='error') return "Couldn't check for updates — check your connection.";
+  if(updateCheck.status==='current') return "You're up to date.";
+  if(updateCheck.status==='available') return `Update available: ${escapeHtml(updateCheck.tag)}`;
+  return '';
 }
 async function applyHotUpdate(){
   const btn = document.getElementById('hot-update-btn');
@@ -80,7 +93,7 @@ async function applyHotUpdate(){
     if(!tag) throw new Error('no release found');
     if(tag === APP_VERSION && !isHotUpdated()){
       resultEl.textContent = `Already on the latest version (${APP_VERSION}).`;
-      if(btn){ btn.textContent = '↻ Update now (no reinstall)'; btn.disabled = false; }
+      if(btn){ btn.textContent = 'Quick update (no reinstall)'; btn.disabled = false; }
       return;
     }
     const [jsRes, cssRes] = await Promise.all([
@@ -100,7 +113,7 @@ async function applyHotUpdate(){
     setTimeout(()=>location.reload(), 700);
   }catch(e){
     resultEl.textContent = "Update failed: " + e.message + ". Nothing was changed.";
-    if(btn){ btn.textContent = '↻ Update now (no reinstall)'; btn.disabled = false; }
+    if(btn){ btn.textContent = 'Quick update (no reinstall)'; btn.disabled = false; }
   }
 }
 function resetToBundledVersion(){
@@ -130,7 +143,7 @@ async function downloadAndInstallLatestApk(){
   }catch(e){
     resultEl.textContent = "Couldn't start the update: " + e.message;
   }
-  if(btn){ btn.textContent = '⬇ Download & install full update'; btn.disabled = false; }
+  if(btn){ btn.textContent = 'Full update (new install)'; btn.disabled = false; }
 }
 const STORY_NPCS = [
   'Kesten Garess','Jhod Kavken','Jubilost Narezen','Tristian','Harrim','Valerie',
@@ -399,12 +412,13 @@ async function loadState(){
   currentKingdomId = null;
   state = null;
   showKingdomPicker();
+  checkForUpdateOnce();
 }
-function exportState(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+function downloadJsonFile(jsonText, nameHint){
+  const blob = new Blob([jsonText], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const safeName = (state.name||'kingdom').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+  const safeName = (nameHint||'kingdom').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
   const date = new Date().toISOString().slice(0,10);
   a.href = url;
   a.download = `${safeName || 'kingdom'}-${date}.json`;
@@ -412,6 +426,16 @@ function exportState(){
   a.click();
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function exportState(){
+  downloadJsonFile(JSON.stringify(state, null, 2), state.name);
+}
+async function exportKingdomById(id){
+  if(id===currentKingdomId && state) await saveCurrentKingdom();
+  const raw = await storageGet(kingdomDataKey(id));
+  if(!raw){ alert("Could not find that kingdom's data to export."); return; }
+  const k = kingdomIndex.find(x=>x.id===id);
+  downloadJsonFile(raw, k && k.name);
 }
 function importStateFile(fileInput){
   const file = fileInput.files[0];
@@ -520,11 +544,27 @@ function renderCreationScreen(){
                 <div class="opt-name">${escapeHtml(k.name)}</div>
                 <div class="opt-detail">${k.government?escapeHtml(k.government)+' · ':''}Level ${k.level}${k.updatedAt?' · '+new Date(k.updatedAt).toLocaleDateString():''}</div>
               </button>
+              <button type="button" class="kingdom-row-export" onclick="exportKingdomById('${k.id}')" title="Export">↓</button>
               <button type="button" class="kingdom-row-delete" onclick="confirmDeleteKingdom('${k.id}')" title="Delete">✕</button>
             </div>`).join('')}
         </div>` : ''}
       <input type="file" accept="application/json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
-      <button class="ghost" style="margin-top:14px;" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>`;
+      <button class="ghost" style="margin-top:14px;" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>
+
+      <div class="card" style="margin-top:20px;">
+        <h3>Backup</h3>
+        <div class="hint" style="margin-top:0;">Your kingdoms are saved on this device only. Use the ↓ button on any kingdom above to back it up or move it to another device — import that file with the button above to pick up right where you left off.</div>
+      </div>
+
+      <div class="card">
+        <h3>App Version <span class="sub">${APP_VERSION}${isHotUpdated()?' (hot-updated)':''}</span></h3>
+        <div class="hint" style="margin-top:0;" id="update-check-result">${renderUpdateStatusLine()}</div>
+        ${updateCheck.status==='available' ? `
+          <button class="ghost" id="hot-update-btn" style="margin-top:8px;" onclick="applyHotUpdate()">Quick update (no reinstall)</button>
+          ${window.AndroidUpdater ? `<button class="ghost" id="full-update-btn" style="margin-top:8px;" onclick="downloadAndInstallLatestApk()">Full update (new install)</button>` : ''}
+        ` : ''}
+        ${isHotUpdated() ? `<button class="ghost danger-ghost" style="margin-top:8px;" onclick="resetToBundledVersion()">Reset to version built into the app</button>` : ''}
+      </div>`;
   }
 
   else if(creationStep===1){
@@ -819,23 +859,7 @@ function renderOverview(){
       }).join('')}
     </div>` : ''}
 
-    <div class="card">
-      <h3>Backup</h3>
-      <div class="hint" style="margin-top:0;">Your kingdoms are saved on this device only. Export a file to back one up or move it to another device — import that file there to pick up right where you left off.</div>
-      <button class="ghost" onclick="exportState()">↓ Export to file</button>
-      <input type="file" accept="application/json" id="import-file-input" style="display:none;" onchange="importStateFile(this)">
-      <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('import-file-input').click()">↑ Import from file</button>
-      <button class="ghost" style="margin-top:8px;" onclick="openSwitchKingdom()">⬡ Create new / load other kingdom</button>
-    </div>
-
-    <div class="card">
-      <h3>App Version <span class="sub">${APP_VERSION}${isHotUpdated()?' (hot-updated)':''}</span></h3>
-      <div class="hint" style="margin-top:0;" id="update-check-result">Installing a newer version over this one keeps all your kingdoms — no need to uninstall first.</div>
-      <button class="ghost" id="update-check-btn" style="margin-top:8px;" onclick="checkForUpdate()">Check for update</button>
-      <button class="ghost" id="hot-update-btn" style="margin-top:8px;" onclick="applyHotUpdate()">↻ Update app.js/style.css now</button>
-      ${window.AndroidUpdater ? `<button class="ghost" id="full-update-btn" style="margin-top:8px;" onclick="downloadAndInstallLatestApk()">⬇ Download &amp; install full update</button>` : ''}
-      ${isHotUpdated() ? `<button class="ghost danger-ghost" style="margin-top:8px;" onclick="resetToBundledVersion()">Reset to version built into the app</button>` : ''}
-    </div>`;
+    `;
 }
 
 function switchTab(tab){
