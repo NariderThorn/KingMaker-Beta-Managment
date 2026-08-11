@@ -20,8 +20,24 @@ android {
     // this every release would get signed with a different key, and Android
     // refuses to install a differently-signed "update" over an existing app,
     // forcing an uninstall (and losing saved kingdoms) on every single release.
+    //
+    // release reuses this same debug.keystore rather than a separate release key.
+    // This is a self-distributed app (GitHub Releases, not the Play Store), so
+    // there's no store-issued cert to lose by doing this, and it means the
+    // release build's signature is identical to the debug build's — switching
+    // which build type CI ships never forces an existing install to be wiped.
+    // If this project ever needs real key separation, generate a dedicated
+    // release keystore and inject it via GitHub Secrets (never commit a real
+    // release key's credentials to a public repo) — but know that flipping the
+    // signature on a build users already have installed forces an uninstall.
     signingConfigs {
         debug {
+            storeFile file("../debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+        release {
             storeFile file("../debug.keystore")
             storePassword "android"
             keyAlias "androiddebugkey"
@@ -34,6 +50,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

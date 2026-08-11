@@ -31,20 +31,20 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Build debug APK
+      - name: Build release APK (self-signed with the committed debug.keystore)
         working-directory: android
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleRelease --no-daemon
 
       - name: Upload APK as build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kingdom-ledger-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: kingdom-ledger-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
 
       - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
