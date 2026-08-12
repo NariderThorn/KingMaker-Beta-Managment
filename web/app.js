@@ -164,11 +164,71 @@ async function downloadAndInstallLatestApk(){
   if(btn){ btn.textContent = 'Full update (new install)'; btn.disabled = false; }
 }
 const STORY_NPCS = [
-  'Kesten Garess','Jhod Kavken','Jubilost Narezen','Tristian','Harrim','Valerie',
+  'Kesten Garess','Jhod Kavken','Jubilost Narthropple','Tristian','Harrim','Valerie',
   'Amiri','Regongar','Octavia','Linzi','Ekundayo','Nok-Nok','Shandra Mvashti',
   'Oleg Leveton','Svetlana Leveton'
 ];
 const STORY_NPC_BONUS = {};
+// Personality/background write-ups below are paraphrased from scratch in our own
+// words — not lifted from Paizo's published prose — same split KM_STRUCTURES and
+// KINGDOM_FEATS already follow, just applied to creative/flavor text instead of
+// mechanical facts (which is a stricter bar: names/deities are bare facts, but HOW
+// a character is described is Paizo's original writing, so every sentence here is
+// written fresh, not reworded from a source passage.
+//
+// `status` is only set to 'Primary Companion' for the 7 names AoN's own Companions
+// page (2e.aonprd.com/Rules.aspx?ID=1880) explicitly confirms: Amiri, Ekundayo,
+// Jubilost, Linzi, Nok-Nok, Tristian, Valerie. That page also confirms exactly 5
+// "secondary companions" exist, limited to downtime/kingdom-management roles — but
+// does not name them, and their names are gated behind spoiler-hidden entries on
+// AoN's Kingmaker Companion Guide sources index that couldn't be reached from here.
+// Kesten Garess and Jhod Kavken are plausible candidates (both tied to specific
+// Leadership roles across other sources) but that's not the same as confirmed, so
+// none of the other 8 roster names are labeled a companion tier either way.
+const STORY_NPC_INFO = {
+  'Amiri': {status:'Primary Companion', deity:'Gorum', description:"A hard-traveling barbarian carrying an oversized greatsword from her homeland. She grew up in a northern tribe that had little patience for a woman built for battle, and channels that old resentment into a blunt, unapologetic love of a good fight. Loyalty, once earned, runs deep with her."},
+  'Ekundayo': {status:'Primary Companion', deity:'Torag', description:"A quiet, grim-faced ranger who lost his wife and daughter to a troll raid and has never fully set the grief down. He tracks with methodical patience and keeps a loyal hound at his side, but rarely lets anyone get close enough to see past the armor he's built around himself."},
+  'Jubilost Narthropple': {status:'Primary Companion', deity:null, description:"A gnome alchemist whose brilliance is matched only by his impatience with everyone slower than him. Sharp-tongued and perpetually irritated by incompetence, he sees the Stolen Lands as one long experiment he's begrudgingly agreed to supervise."},
+  'Linzi': {status:'Primary Companion', deity:null, description:"A halfling bard who talked her way into the expedition specifically to chronicle it — she's convinced a founding story this good deserves a proper ballad. Cheerful, curious, and always scribbling notes, she treats the whole venture as the adventure of a lifetime."},
+  'Nok-Nok': {status:'Primary Companion', deity:null, description:"A goblin who finds traps, ambushes, and general chaos delightful rather than dangerous. Fiercely loyal in his own unpredictable way, he treats the wilderness like a playground and everyone else's nerves like a minor inconvenience."},
+  'Tristian': {status:'Primary Companion', deity:'Sarenrae', description:"A cleric raised in a temple in Kelesh, gentle and quick to see the good in people. He came to the Stolen Lands to investigate the region's curses, and leans on healing and protective magic more readily than a blade — his faith has quietly pulled him back from the brink more than once."},
+  'Valerie': {status:'Primary Companion', deity:null, description:"A disciplined fighter who left a strict, regimented order behind her and rarely explains why. Dutiful almost to a fault, she holds herself and everyone around her to a high standard, and keeps her own history at arm's length."},
+  'Kesten Garess': {status:null, deity:null, description:"A fighter from a noble Brevic house who was disowned for falling in love with a woman his family considered beneath him. He served as a guard captain before that, and carries himself with the discipline of that training and the quiet weight of what it cost him."},
+  'Jhod Kavken': {status:null, deity:'Erastil', description:"An earnest, soft-spoken priest searching for a long-lost temple of his god somewhere in the Stolen Lands. Devout without being preachy, he's the kind of cleric who'd rather tend a garden or mend a fence than argue theology."},
+  'Harrim': {status:null, deity:'Groetus', description:"A dwarf cleric who tried, and failed, again and again, to honor his people's god of craft — every project he touched fell apart. Worn down by the streak of bad luck, he found a grim sort of comfort in a god of endings instead, and now delivers doom-laden pronouncements with the flat calm of someone who's made peace with pessimism."},
+  'Regongar': {status:null, deity:null, description:"A half-orc spellcaster who fights as fiercely with a blade as with magic, forged by years as a slave to a ruthless technological cult. Volatile and blunt, he has little patience for cowardice or hesitation, and holds few things sacred besides the freedom he fought hard to win."},
+  'Octavia': {status:null, deity:null, description:"A half-elf trained in both arcane spellcraft and quiet, practical thievery, sold into slavery as a child alongside Regongar. Despite everything, she's kept a light, optimistic streak — freedom clearly means everything to her, even if she rarely says so directly."},
+  'Shandra Mvashti': {status:null, deity:null, description:"A settler with a personal, long-standing claim to a homestead somewhere in the Stolen Lands. Practical and determined, she's less interested in glory than in seeing that claim honored."},
+  'Oleg Leveton': {status:null, deity:null, description:"A gruff former city-dweller who traded noise and politics for a quiet trading post on the frontier. Prefers being master of his own small patch of land to answering to anyone else, but treats travelers who pass through fairly."},
+  'Svetlana Leveton': {status:null, deity:null, description:"Oleg's wife and partner in running their trading post — warm, even-tempered, and the more approachable of the two. Minor nobility by birth, she never took to court intrigue and found she preferred an honest, hands-on life instead."}
+};
+let expandedNPCs = new Set(); // transient UI state — which roster cards are open
+function toggleNPCCard(name){
+  if(expandedNPCs.has(name)) expandedNPCs.delete(name); else expandedNPCs.add(name);
+  renderNPCRoster();
+}
+function renderNPCRoster(){
+  const el = document.getElementById('npc-roster-card');
+  if(!el) return;
+  el.innerHTML = `<div class="card">
+    <h3>Kingmaker Roster</h3>
+    <div class="hint" style="margin-top:0;">Tap a name for a quick reminder of who they are.</div>
+    ${STORY_NPCS.map(name=>{
+      const info = STORY_NPC_INFO[name] || {};
+      const expanded = expandedNPCs.has(name);
+      return `<div class="npc-entry">
+        <button type="button" class="npc-entry-head" onclick="toggleNPCCard('${escapeAttr(name)}')">
+          <span>${escapeHtml(name)}${info.status?` <span class="pill" style="font-size:10px;margin-left:4px;">${escapeHtml(info.status)}</span>`:''}</span>
+          <span>${expanded?'−':'+'}</span>
+        </button>
+        ${expanded ? `<div class="npc-entry-body">
+          ${info.deity?`<div class="hint" style="margin-top:0;"><b style="color:var(--text);">Deity:</b> ${escapeHtml(info.deity)}</div>`:''}
+          <div class="hint" style="margin-top:4px;">${escapeHtml(info.description||'No description recorded yet.')}</div>
+        </div>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
 
 // Kingdom Feats — names, levels, and prerequisites are game facts (not
 // copyrightable); "effect" is our own short paraphrase of the mechanic, not
@@ -733,7 +793,7 @@ const DEFAULT_STATE = () => ({
   ruin:{Corruption:{points:0,threshold:10,penalty:0}, Crime:{points:0,threshold:10,penalty:0},
         Decay:{points:0,threshold:10,penalty:0}, Strife:{points:0,threshold:10,penalty:0}},
   skills: SKILLS.reduce((o,[n])=>{o[n]={rank:'U',status:0};return o;},{}),
-  leaders: ROLES.reduce((o,[r])=>{o[r]={name:'',invested:false,vacant:false};return o;},{}),
+  leaders: ROLES.reduce((o,[r])=>{o[r]={name:'',invested:false,vacant:false,pcHeld:false};return o;},{}),
   goods: GOODS.reduce((o,g)=>{o[g]=0;return o;},{}),
   settlements: [],
   log: [],
@@ -850,7 +910,8 @@ function normalizeState(){
   if(!state.kingdomFeats) state.kingdomFeats = [];
   if(state.playerCharacter===undefined) state.playerCharacter='';
   for(const s of SKILLS){ if(!state.skills[s[0]]) state.skills[s[0]]={rank:'U',status:0}; }
-  for(const r of ROLES){ if(!state.leaders[r[0]]) state.leaders[r[0]]={name:'',invested:false,vacant:false}; }
+  for(const r of ROLES){ if(!state.leaders[r[0]]) state.leaders[r[0]]={name:'',invested:false,vacant:false,pcHeld:false}; }
+  for(const r of ROLES){ if(state.leaders[r[0]].pcHeld===undefined) state.leaders[r[0]].pcHeld=false; }
   for(const g of GOODS){ if(state.goods[g]===undefined) state.goods[g]=0; }
   if(!state.hexes) state.hexes={};
   if(!state.settlements) state.settlements = [];
@@ -1307,7 +1368,9 @@ function renderOverview(){
       <div class="seal"><div class="val mono">${totalDC}</div><div class="lbl">Control DC${infoIcon('Control DC')}</div><div class="sub">${sz.type}</div></div>
       <div class="seal"><div class="val mono">${state.size}</div><div class="lbl">Size</div><div class="sub">hexes</div></div>
       <div class="seal"><div class="val mono">${state.rp}</div><div class="lbl">RP${infoIcon('RP')}</div><div class="sub">${sz.die}×${diceCount}${featResourceDieBonus()?`+${featResourceDieBonus()}`:''}/turn</div></div>
-      <div class="seal"><div class="val mono">${state.unrest}</div><div class="lbl">Unrest${infoIcon('Unrest')}</div><div class="sub">${unrestPenalty(state.unrest)<0?fmt(unrestPenalty(state.unrest))+' checks':'no penalty'}</div></div>
+      <div class="seal"><div class="val mono">${state.unrest}</div><div class="lbl">Unrest${infoIcon('Unrest')}</div><div class="sub">${unrestPenalty(state.unrest)<0?fmt(unrestPenalty(state.unrest))+' checks':'no penalty'}</div>
+        <div class="stepper" style="justify-content:center;margin-top:6px;"><button onclick="adjust('unrest',-1)">−</button><button onclick="adjust('unrest',1)">+</button></div>
+      </div>
       <div class="seal"><div class="val mono">${state.fame}</div><div class="lbl">${state.fameType}</div><div class="sub">of ${state.fameMax}</div></div>
     </div>
 
@@ -1336,7 +1399,7 @@ function renderOverview(){
             return `<tr>
               <td>${role}</td>
               <td style="color:var(--text-muted);">${ab}</td>
-              <td>${l.vacant||!l.name ? '<span style="color:var(--rust);font-style:italic;">Vacant</span>' : escapeHtml(l.name)}</td>
+              <td>${l.vacant||!l.name ? '<span style="color:var(--rust);font-style:italic;">Vacant</span>' : (l.pcHeld?'★ ':'')+escapeHtml(l.name)}</td>
               <td>${l.invested?'<span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">yes</span>':'—'}</td>
             </tr>`;
           }).join('')}
@@ -1501,13 +1564,16 @@ let customNameRoles = new Set(); // transient UI-only state — which roles curr
 function renderLeaders(){
   const investedCount = ROLES.filter(([r])=>state.leaders[r].invested).length;
   document.getElementById('invested-count').textContent = `${investedCount} / 4 invested`;
-  document.getElementById('leaders-list').innerHTML = ROLES.map(([role,ab])=>{
+  const pcCount = ROLES.filter(([r])=>state.leaders[r].pcHeld).length;
+  document.getElementById('leaders-list').innerHTML = `
+    ${pcCount>0 ? `<button class="ghost" style="margin-bottom:10px;" onclick="investPCsFirst()">Invest PC-held roles first</button>` : ''}
+    ${ROLES.map(([role,ab])=>{
     const l = state.leaders[role];
     const isPreset = STORY_NPCS.includes(l.name);
-    const showCustomInput = customNameRoles.has(role) || (l.name && !isPreset);
+    const showCustomInput = customNameRoles.has(role) || (l.name && !isPreset && !l.pcHeld);
     return `<div class="row" style="flex-direction:column;align-items:stretch;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div class="label">${role}${infoIcon(role)}<small>key ability: ${ab}</small></div>
+        <div class="label">${role}${infoIcon(role)}${l.pcHeld?' <span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">★ PC-held</span>':''}<small>key ability: ${ab}</small></div>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);">
           <input type="checkbox" ${l.invested?'checked':''} onchange="toggleInvest('${role}',this.checked)"> invested
         </label>
@@ -1515,7 +1581,8 @@ function renderLeaders(){
       <div style="display:flex;gap:8px;margin-top:6px;flex-direction:column;">
         <select class="wide" onchange="handleLeaderSelect('${role}', this.value)">
           <option value="" ${!l.name?'selected':''}>— Vacant —</option>
-          ${STORY_NPCS.map(n=>`<option value="${escapeAttr(n)}" ${l.name===n?'selected':''}>${escapeHtml(n)}${STORY_NPC_BONUS[n]?' · '+escapeHtml(STORY_NPC_BONUS[n]):''}</option>`).join('')}
+          ${state.playerCharacter ? `<option value="__pc__" ${l.pcHeld?'selected':''}>★ ${escapeHtml(state.playerCharacter)} (your character)</option>` : ''}
+          ${STORY_NPCS.map(n=>`<option value="${escapeAttr(n)}" ${l.name===n && !l.pcHeld?'selected':''}>${escapeHtml(n)}${STORY_NPC_BONUS[n]?' · '+escapeHtml(STORY_NPC_BONUS[n]):''}</option>`).join('')}
           <option value="__custom__" ${showCustomInput?'selected':''}>Custom…</option>
         </select>
         ${showCustomInput ? `<input class="wide" type="text" placeholder="Custom name" value="${escapeAttr(isPreset?'':l.name)}" onchange="state.leaders['${role}'].name=this.value;scheduleSave();render();">` : ''}
@@ -1524,17 +1591,44 @@ function renderLeaders(){
         </label>
       </div>
     </div>`;
-  }).join('');
+  }).join('')}`;
   renderLeadershipActivitiesCard();
+  renderNPCRoster();
 }
+// PC-held is a real structural flag, not just a name string — matters for the Event-
+// resolution bonus (a role's PC holder, no vacancy penalty, boosts that role's event
+// checks) and is why picking it isn't the same as typing the name into Custom.
 function handleLeaderSelect(role, val){
   if(val==='__custom__'){
     customNameRoles.add(role);
+    state.leaders[role].pcHeld = false;
     if(STORY_NPCS.includes(state.leaders[role].name)) state.leaders[role].name = '';
+  } else if(val==='__pc__'){
+    customNameRoles.delete(role);
+    state.leaders[role].name = state.playerCharacter;
+    state.leaders[role].pcHeld = true;
+    // soft default, not a hard rule: a newly PC-held role gets invested automatically
+    // if there's room, since Step 7 of kingdom creation says PCs are invested first —
+    // this never un-invests anything else, it's just a sensible starting point.
+    const investedCount = ROLES.filter(([r])=>state.leaders[r].invested).length;
+    if(!state.leaders[role].invested && investedCount<4) state.leaders[role].invested = true;
   } else {
     customNameRoles.delete(role);
     state.leaders[role].name = val;
+    state.leaders[role].pcHeld = false;
   }
+  scheduleSave(); render();
+}
+// Explicit, user-triggered re-ordering (not automatic) — invests every PC-held role
+// first, then fills any remaining slots (up to 4) with whichever NPC roles were
+// already invested. Never invests a role that wasn't already chosen by name.
+function investPCsFirst(){
+  const pcRoles = ROLES.filter(([r])=>state.leaders[r].pcHeld).map(([r])=>r);
+  const otherInvested = ROLES.filter(([r])=>state.leaders[r].invested && !state.leaders[r].pcHeld).map(([r])=>r);
+  ROLES.forEach(([r])=>{ state.leaders[r].invested = false; });
+  let slots = 4;
+  pcRoles.slice(0,slots).forEach(r=>{ state.leaders[r].invested = true; slots--; });
+  otherInvested.slice(0,slots).forEach(r=>{ state.leaders[r].invested = true; });
   scheduleSave(); render();
 }
 function toggleInvest(role, checked){
@@ -1614,7 +1708,7 @@ function renderLeadershipActivitiesCard(){
       const l = state.leaders[role];
       const remaining = leadershipActivitiesRemaining(role);
       return `<div class="row">
-        <div class="label">${role}<small>${escapeHtml(l.name)}</small></div>
+        <div class="label">${role}<small>${l.pcHeld?'★ ':''}${escapeHtml(l.name)}</small></div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="mono" style="font-size:12px;color:var(--text-muted);">${remaining}/${cap} left</span>
           <button class="small-ghost" ${remaining<=0?'style="opacity:.4;pointer-events:none;"':''} onclick="openLeadershipActivityPicker('${role}')">Log Activity</button>
@@ -2173,12 +2267,52 @@ function formatCost(cost){
   GOODS.forEach(g=>{ const k=g.toLowerCase(); if(cost[k]) parts.push(cost[k]+' '+g); });
   return parts.length ? parts.join(', ') : 'free';
 }
+function shortCommodities(cost){
+  return GOODS.filter(g=>{ const k=g.toLowerCase(); const need=cost[k]||0; return need>state.goods[g]; });
+}
 function affordabilityMessage(cost){
   const rpCost = cost.rp||0;
   if(state.rp < rpCost) return `Not enough RP — this costs ${rpCost} RP, you have ${state.rp}.`;
-  const short = [];
-  GOODS.forEach(g=>{ const k=g.toLowerCase(); const need=cost[k]||0; if(need>state.goods[g]) short.push(`${need} ${g} (have ${state.goods[g]})`); });
-  return short.length ? `Not enough commodities — needs ${short.join(', ')}.` : null;
+  const shorts = shortCommodities(cost);
+  if(!shorts.length) return null;
+  const short = shorts.map(g=>{ const k=g.toLowerCase(); const need=cost[k]||0; return `${need} ${g} (have ${state.goods[g]})`; });
+  return `Not enough commodities — needs ${short.join(', ')}.`;
+}
+// Proactive fix suggestion for a commodity shortage: find an already-claimed hex that
+// either already has the right terrain (just needs its Work Site set) or needs both.
+// Doesn't distinguish "claimed" from "any hex GM has entered" — the app doesn't track
+// claim status separately from having a hex entry at all, so any tracked hex counts.
+function suggestCommodityFixHex(good){
+  const site = Object.entries(HEX_WORK_SITES).find(([,def])=>def.good===good);
+  if(!site) return null;
+  const [siteName, siteDef] = site;
+  const ready = Object.entries(state.hexes).find(([,h])=> h && h.terrain && siteDef.terrains && siteDef.terrains.includes(h.terrain) && h.workSite!==siteName);
+  if(ready){
+    const [col,row] = ready[0].split('_').map(Number);
+    return {col, row, siteName, needsTerrainToo:false};
+  }
+  return {siteName, needsTerrainToo:true};
+}
+function showCommodityShortageHelp(cost, problemText){
+  const shorts = shortCommodities(cost);
+  const overlay = document.createElement('div');
+  overlay.id = 'commodity-help-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:120;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:380px;width:100%;margin:0;">
+    <h3 style="color:var(--rust);">Not enough commodities</h3>
+    <div class="hint" style="margin-top:0;">${escapeHtml(problemText)}</div>
+    ${shorts.map(good=>{
+      const fix = suggestCommodityFixHex(good);
+      if(!fix) return '';
+      return fix.needsTerrainToo
+        ? `<div class="hint" style="margin-top:10px;margin-bottom:2px;">${escapeHtml(good)}: no tracked hex has the right terrain for a ${escapeHtml(fix.siteName)} yet.</div>
+           <button class="ghost" onclick="document.getElementById('commodity-help-overlay').remove();switchTab('map');">Go claim one on the Map</button>`
+        : `<div class="hint" style="margin-top:10px;margin-bottom:2px;">${escapeHtml(good)}: hex ${hexLabel(fix.col,fix.row)} already has the right terrain — it just needs a ${escapeHtml(fix.siteName)}.</div>
+           <button class="action" onclick="document.getElementById('commodity-help-overlay').remove();jumpToHex(${fix.col},${fix.row});">Take me to ${hexLabel(fix.col,fix.row)}</button>`;
+    }).join('')}
+    <button class="ghost" style="margin-top:10px;" onclick="document.getElementById('commodity-help-overlay').remove();">Close</button>
+  </div>`;
+  document.body.appendChild(overlay);
 }
 function spendResources(cost){
   state.rp = Math.max(0, state.rp - (cost.rp||0));
@@ -2194,7 +2328,7 @@ function placeStructureInLot(sid, gridNum, blockIdx, structureName){
   const emptyIdxs = block.map((v,i)=>v?-1:i).filter(i=>i!==-1);
   if(emptyIdxs.length < st.lots) return;
   const problem = affordabilityMessage(st.cost);
-  if(problem){ alert(problem); return; }
+  if(problem){ shortCommodities(st.cost).length ? showCommodityShortageHelp(st.cost, problem) : alert(problem); return; }
   if(st.ruin && /of your choice/i.test(st.ruin)){
     pendingStructurePlacement = {sid, gridNum, blockIdx, structureName, emptyIdxs};
     openRuinChoicePopup();
@@ -2284,7 +2418,7 @@ function upgradeStructureGroup(sid, gridNum, blockIdx, groupId, newName){
   const emptyIdxs = need>0 ? block.map((v,i)=>v?-1:i).filter(i=>i!==-1) : [];
   if(need>0 && emptyIdxs.length<need){ alert('Not enough open lots in this block to upgrade to '+newName+'.'); return; }
   const problem = affordabilityMessage(newDef.cost);
-  if(problem){ alert(problem); return; }
+  if(problem){ shortCommodities(newDef.cost).length ? showCommodityShortageHelp(newDef.cost, problem) : alert(problem); return; }
   spendResources(newDef.cost);
   if(need>0){
     for(let i=0;i<need;i++){ block[emptyIdxs[i]] = {name:newName, g:groupId}; oldSlots.push(emptyIdxs[i]); }
@@ -2369,11 +2503,20 @@ function pinCapitalLocation(col,row){
   const key = hexKey(col,row);
   const existing = state.hexes[key] || {note:''};
   state.hexes[key] = {name: state.name, type:'Capital', note: existing.note||'', resources: existing.resources||'', features: existing.features||'', terrain: existing.terrain||'', workSite: existing.workSite||'', resourceFlag: existing.resourceFlag||false};
+  // A capital is mechanically a settlement like any other (same grid, same
+  // structures) — create and open a real Settlement here instead of leaving a bare
+  // hex label with nothing underneath it. Reuses addSettlement()'s exact shape.
+  let capSettlement = state.settlements.find(s=>s.col===col && s.row===row);
+  if(!capSettlement){
+    capSettlement = {id: Date.now(), name: state.name, type:'Village', grid: defaultSettlementGrid(), notes:'', col, row};
+    state.settlements.push(capSettlement);
+  }
   cancelPickLocation();
   scheduleSave();
   updateHexMarkers();
   renderNotesTab();
   render();
+  switchTab('notes');
 }
 function cancelPickLocation(){
   pickingForSettlement = null;
@@ -2697,7 +2840,7 @@ function outfitArmyResolve(armyId, gearName, degree){
   if(!army || !g) return;
   markArmyActivityUsed(army);
   const problem = affordabilityMessage(g.cost);
-  if(problem){ alert(problem); return; }
+  if(problem){ shortCommodities(g.cost).length ? showCommodityShortageHelp(g.cost, problem) : alert(problem); return; }
   if(degree>=2){
     spendResources(g.cost);
     if(g.replaces) army.gear = army.gear.filter(x=>x!==g.replaces);

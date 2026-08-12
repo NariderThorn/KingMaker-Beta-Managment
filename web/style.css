@@ -212,6 +212,14 @@
   .skill-source-icon{color:var(--gold-dim);font-size:11px;margin-left:5px;}
   .info-icon{color:var(--gold-dim);font-size:11px;margin-left:4px;cursor:pointer;border:1px solid var(--gold-dim);border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;line-height:1;vertical-align:middle;}
   .info-icon:active{background:rgba(201,162,75,0.15);}
+  .npc-entry{border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
+  .npc-entry-head{
+    width:100%;display:flex;justify-content:space-between;align-items:center;
+    background:var(--surface);border:none;padding:10px 12px;color:var(--text);
+    font-family:'Cinzel',serif;font-weight:600;font-size:14px;cursor:pointer;
+  }
+  .npc-entry-head:active{background:var(--surface-raised);}
+  .npc-entry-body{padding:0 12px 12px;background:var(--surface);}
 
   .note-item{
     display:flex;gap:10px;padding:11px 4px;border-bottom:1px solid var(--border);
