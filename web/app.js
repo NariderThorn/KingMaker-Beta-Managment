@@ -18,19 +18,206 @@ const ROLES = [
 // the name. Several activities that sound Leadership-flavored actually aren't (New
 // Leadership is Downtime+Upkeep; Improve Lifestyle and Tap Treasury are Commerce+Downtime)
 // and are deliberately left out. `skills` lists every option the activity allows.
+//
+// Every entry with `outcomes` is mechanically resolved the same way Commerce/Region
+// activities are (openDegreePicker -> a resolve function that actually moves RP/Unrest/
+// Ruin/Fame/XP/Commodities/hexes/settlements), not just logged. Two activities are
+// deliberately left as log-only (no `outcomes`, see LEADERSHIP_MANUAL_ONLY below) because
+// their real effect needs a concept the app doesn't track: Hire Adventurers ends a
+// "continuous event," and the app has no persisted event registry to end; Focused Attention
+// grants a bonus to another leader's *check*, and the app never rolls checks for the
+// player, so — unlike other circumstance bonuses here, which at least land on a state
+// value the player later reads off (RP, a die-size table, etc.) — there is no state that
+// bonus could attach to. That's a real gap, not an oversight; see the Leadership Activities
+// memory note if this file's context is unfamiliar with why it stays that way.
 const LEADERSHIP_ACTIVITIES = {
-  'Celebrate Holiday':        {skills:['Folklore'], note:'Untrained. DC +4 if also celebrated last turn.'},
-  'Creative Solution':        {skills:['Scholarship'], note:'Untrained. Success costs 1d4 RP researching it; failure costs 2d6 RP.'},
-  'Establish Trade Agreement':{skills:['Trade'], note:'Trade by default — Boating if a navigable river connects, or Magic if the kingdom is Master+ in Magic. Needs existing diplomatic relations.'},
-  "Pledge of Fealty":         {skills:['Intrigue','Statecraft','Warfare'], note:'Some groups respond better to a particular skill.'},
-  'Provide Care':             {skills:['Defense'], note:'Untrained.'},
-  'Quell Unrest':             {skills:['Arts','Folklore','Intrigue','Magic','Politics','Warfare'], note:"Can't use the same skill two turns in a row."},
-  'Repair Reputation':        {skills:['Arts','Trade','Engineering','Intrigue'], note:'Arts→Corruption, Trade→Crime, Engineering→Decay, Intrigue→Strife. DC is Control DC + 2.'},
-  'Request Foreign Aid':      {skills:['Statecraft'], note:'Trained. Needs existing diplomatic relations with the group asked.'},
-  'Rest and Relax':           {skills:['Arts','Boating','Scholarship','Trade','Wilderness'], note:'DC +4 if also used last turn.'},
-  'Send Diplomatic Envoy':    {skills:['Statecraft'], note:'Trained.'},
-  'Supernatural Solution':    {skills:['Magic'], note:'Untrained. Success costs 1d4 RP researching it; failure costs 2d6 RP.'}
+  'Pledge of Fealty': {
+    skills:['Intrigue','Statecraft','Warfare'], note:'Some groups respond better to a particular skill. DC = the group’s Negotiation DC.',
+    needsGroupInput:true, needsHexInput:'optional',
+    outcomes:{
+      3:'The group joins your kingdom. If you haven’t already claimed their hex, you do so now (+10 kingdom XP). Add them to Diplomatic Relations.',
+      2:'The group joins your kingdom (no hex claim). Add them to Diplomatic Relations. Roll 1 Resource Die and spend that RP to integrate them.',
+      1:'The group refuses to pledge for now — you can retry next turn. +1 Unrest.',
+      0:'The group refuses to pledge, permanently. +2 Unrest, and +1 to a Ruin of your choice (Abilities tab).'
+    }
+  },
+  'Send Diplomatic Envoy': {
+    skills:['Statecraft'], note:'Trained. DC = the group’s Negotiation DC. −4 and worsened one degree if the target is at war with you.',
+    needsGroupInput:true,
+    outcomes:{
+      3:'Diplomatic relations established, with a +2 circumstance bonus to checks with that group until next Kingdom turn. First time ever: +60 kingdom XP milestone.',
+      2:'Diplomatic relations established. First time ever: +60 kingdom XP milestone.',
+      1:'The envoy is received, but the target isn’t ready — sending again next turn gets a +2 bonus. No relations yet.',
+      0:'The envoy fails to arrive. +1d4 Unrest, and you can’t Send a Diplomatic Envoy to this target again for 3 turns.'
+    }
+  },
+  'Creative Solution': {
+    skills:['Scholarship'], note:'Untrained. A Fortune effect usable on any Kingdom skill check this turn.',
+    outcomes:{
+      3:'Free — usable to reroll one Kingdom check this turn with a +2 bonus.',
+      2:'Costs 1d4 RP to research, usable the same way.',
+      1:'Costs 2d6 RP and fails outright — no advantage gained.',
+      0:'Costs 2d6 RP and fails; −1 circumstance penalty to Culture-based checks until the end of next Kingdom turn.'
+    }
+  },
+  'Supernatural Solution': {
+    skills:['Magic'], note:'Untrained. Like Creative Solution, but rolls Magic instead — can’t be combined with it the same turn.',
+    outcomes:{
+      3:'Free — usable to take the better of a Magic check or the triggering Kingdom check this turn.',
+      2:'Costs 1d4 RP to research, usable the same way.',
+      1:'Costs 2d6 RP and fails outright — no advantage gained.',
+      0:'Costs 2d6 RP and fails; can’t attempt Supernatural Solution again for 2 Kingdom turns.'
+    }
+  },
+  'Provide Care': {
+    skills:['Defense'], note:'Untrained.',
+    outcomes:{
+      3:'Reduce Unrest by 1, and reduce a Ruin of your choice by 1 (Abilities tab).',
+      2:'Reduce Unrest by 1.',
+      1:'No effect either way.',
+      0:'+1 Unrest (or, GM’s call, +1 to a Ruin of your choice instead).'
+    }
+  },
+  'Quell Unrest': {
+    skills:['Arts','Folklore','Intrigue','Magic','Politics','Warfare'], note:"Can't use the same skill two turns in a row.",
+    outcomes:{
+      3:'Reduce Unrest by 1d6.',
+      2:'Reduce Unrest by 1.',
+      1:'No reduction.',
+      0:'+1d4 Unrest (or, GM’s call, +1 to two Ruins of your choice instead).'
+    }
+  },
+  'Repair Reputation': {
+    skills:['Arts','Trade','Engineering','Intrigue'], note:'Arts→Corruption, Trade→Crime, Engineering→Decay, Intrigue→Strife. DC is Control DC + 2.',
+    needsRuinInput:true,
+    outcomes:{
+      3:'Reduce the targeted Ruin by 2, and reduce its current penalty by 1.',
+      2:'Reduce the targeted Ruin by 1.',
+      1:'No reduction — can’t retry this Ruin for 1 turn.',
+      0:'Fails publicly: +1d4 Unrest, and can’t retry this Ruin for 3 turns.'
+    }
+  },
+  'Request Foreign Aid': {
+    skills:['Statecraft'], note:'Trained. Needs existing diplomatic relations with the group asked.',
+    needsGroupInput:true,
+    outcomes:{
+      3:'+4 circumstance bonus to one Kingdom skill check this turn. Roll 2 Resource Dice and gain that RP.',
+      2:'Choose: roll 1 Resource Die and gain that RP, or take a +2 circumstance bonus to a check this turn.',
+      1:'Gain 1d4 RP at the start of next turn.',
+      0:'No aid. +1d4 Unrest.'
+    }
+  },
+  'Rest and Relax': {
+    skills:['Arts','Boating','Scholarship','Trade','Wilderness'], note:'DC +4 if also used last turn.',
+    outcomes:{
+      3:'Reduce Unrest by 1. Your next Leadership activity this turn gets a +2 circumstance bonus.',
+      2:'Reduce Unrest by 1.',
+      1:'No notable benefit.',
+      0:'No mechanical cost beyond a −2 penalty to your next Leadership-activity check.'
+    }
+  },
+  'Celebrate Holiday': {
+    skills:['Folklore'], note:'Untrained. DC +4 if also celebrated last turn.',
+    outcomes:{
+      3:'Free — +2 circumstance bonus to Loyalty-based checks until end of next Kingdom turn.',
+      2:'Roll 1 Resource Die and spend that RP; +1 circumstance bonus to Loyalty-based checks until end of next turn.',
+      1:'Same RP cost as success, but no bonus.',
+      0:'Reduce next turn’s Resource Dice total by 4; −1 circumstance penalty to Loyalty-based checks until end of next turn.'
+    }
+  },
+  'Craft Luxuries': {
+    skills:['Trade'], note:'Untrained.',
+    outcomes:{
+      3:'Gain 1d4 Luxury Commodities.',
+      2:'Gain 1 Luxury Commodity.',
+      1:'Nothing produced.',
+      0:'+1 to a Ruin of your choice (Abilities tab).'
+    }
+  },
+  'Create a Masterpiece': {
+    skills:['Arts'], note:'Once per Kingdom turn.',
+    outcomes:{
+      3:`Gain 2 ${'Fame'} points total (this turn’s +1, plus next turn’s early), and roll 2 Resource Dice for RP.`,
+      2:'Gain 1 Fame/Infamy point.',
+      1:'The masterpiece falls flat — no effect.',
+      0:'Lose 1 Fame/Infamy point (if you have none, +1d4 Unrest instead).'
+    }
+  },
+  'Establish Trade Agreement': {
+    skills:['Trade'], note:'Trade by default — Boating if a navigable river connects, or Magic if the kingdom is Master+ in Magic. Needs existing diplomatic relations.',
+    needsGroupInput:'optional',
+    outcomes:{
+      3:'Trade agreement established (+1 to Trade Agreements). Roll 2 Resource Dice and gain that RP.',
+      2:'Trade agreement established (+1 to Trade Agreements).',
+      1:'Choose: pay 2 Resource Dice worth of RP to still succeed, or let it fail this turn.',
+      0:'Traders don’t return. +1 Unrest.'
+    }
+  },
+  'Capital Investment': {
+    skills:['Trade'], note:'Requires a Bank in the capital settlement’s influence.',
+    outcomes:{
+      3:'Roll 4 Resource Dice and gain that RP.',
+      2:'Roll 2 Resource Dice and gain that RP.',
+      1:'Gain 1d4 RP.',
+      0:'Choose: roll 1 Resource Die and gain that RP, but add the same amount to Crime — or gain nothing and Crime +1.'
+    }
+  },
+  'Clandestine Business': {
+    skills:['Intrigue'], note:'DC = Control DC, +2 per consecutive turn pursued, −1 per turn skipped.',
+    outcomes:{
+      3:'Roll 2 Resource Dice and gain that RP, plus gain 1d4 Luxury Commodities.',
+      2:'Choose: roll 2 Resource Dice and gain that RP, or gain 1d4 Luxury Commodities. Either way, +1 Unrest.',
+      1:'Roll 1 Resource Die and gain that RP. +1 Unrest, +1 Corruption.',
+      0:'+1d6 Unrest, +2 Corruption, and +1 to another Ruin of your choice (Abilities tab).'
+    }
+  },
+  'Purchase Commodities': {
+    skills:['Trade'], note:'Spend 8 RP for Luxuries, or 4 RP for any other Commodity, up front.',
+    needsGoodInput:true,
+    outcomes:{
+      3:'Gain 4 of the chosen Commodity, plus 2 more of another type (not Luxuries).',
+      2:'Gain 2 of the chosen Commodity.',
+      1:'Gain 1 of the chosen Commodity.',
+      0:'Gain none — the RP is still spent.'
+    }
+  },
+  'Relocate Capital': {
+    skills:['Engineering'], note:'Target settlement needs a Castle, Palace, or Town Hall. All leaders spend every remaining Leadership activity this turn on this. DC = Control DC + 5. 3-turn cooldown.',
+    needsSettlementInput:true,
+    outcomes:{
+      3:'The capital relocates with no penalty.',
+      2:'The capital relocates. +1 Unrest from the disruption.',
+      1:'The move fails. +1 Unrest, and +1 to two Ruins of your choice (Abilities tab).',
+      0:'The move fails badly. +1d4 Unrest, and +1 to three Ruins of your choice, +3 to a fourth (Abilities tab).'
+    }
+  },
+  'Infiltration': {
+    skills:['Intrigue'], note:'Untrained. Investigating your own kingdom’s health.',
+    outcomes:{
+      3:'Precise intelligence — reduce Unrest by 1d4.',
+      2:'Vague intelligence — reduce Unrest by 1.',
+      1:'Your spies learn nothing, but aren’t compromised.',
+      0:'Spies are lost. −2 circumstance penalty to all kingdom checks until end of next turn.'
+    }
+  },
+  'Prognostication': {
+    skills:['Folklore'], note:'Foresight about this turn’s Event phase.',
+    outcomes:{
+      3:'If a random event occurs this turn, you get to pick between two rolled results, with a +2 bonus to resolve it.',
+      2:'+1 circumstance bonus to the check made to resolve a random kingdom event this turn, if one occurs.',
+      1:'No aid this turn.',
+      0:'A random kingdom event is automatically triggered this turn, bypassing the DC 16 check.'
+    }
+  },
+  'Hire Adventurers': {
+    skills:['Statecraft'], note:'Ends an ongoing continuous kingdom event. Roll 1 Resource Die and spend that RP each attempt. This app doesn’t track continuous events as persisted entities yet, so this stays a reference-only activity — log the attempt and resolve its RP cost/effect by hand.'
+  },
+  'Focused Attention': {
+    skills:['any'], note:'DC 20, aiding another leader’s upcoming check with a +2 circumstance bonus. AoN gives this activity no failure/critical text at all (success-only), and the bonus applies to a check the app never rolls for you, so there’s nothing here to automate — log it as a reminder for the table.'
+  }
 };
+// Activities with no `outcomes` stay in the old log-only flow (see openLeadershipActivityPicker).
+const LEADERSHIP_MANUAL_ONLY = Object.keys(LEADERSHIP_ACTIVITIES).filter(n=>!LEADERSHIP_ACTIVITIES[n].outcomes);
 // Commerce Phase activities (2e.aonprd.com/Rules.aspx?ID=1800) — each may be attempted
 // once per Kingdom turn independently of the others (not a shared pool), skill/trait and
 // outcome text confirmed individually against each activity's own Actions.aspx page.
@@ -950,6 +1137,7 @@ const DEFAULT_STATE = () => ({
   consumption:0, turn:1, atWar:false, eventDC:16, taxesCollectedLastTurn:false,
   fameType:'Fame', fame:0, fameMax:3, rp:0, turnWizard:null, leadershipTurn:0, leadershipUsed:{}, leadershipUsedNames:{},
   rpSpentThisTurn:0, milestoneRP100Claimed:false, pendingBonusResourceDice:0, pendingBonusRP:0, tradeAgreements:0,
+  diplomaticRelations:[], diplomacyMilestoneClaimed:false, relocateCapitalCooldownUntilTurn:0,
   creation:{charter:'', charterFreeBoost:'', heartland:'', government:'', governmentFreeBoost:'', bonusBoost1:'', bonusBoost2:''},
   levelBoosts:[],
   kingdomFeats:[],
@@ -1834,6 +2022,20 @@ function leadershipActivitiesRemaining(role){
   ensureLeadershipTurnFresh();
   return Math.max(0, leadershipActivityCap(role) - (state.leadershipUsed[role]||0));
 }
+// Reasons an otherwise-mechanized Leadership activity can't be picked right now — same
+// "gray it out and say why" idiom used for unaffordable Build Structure options.
+function leadershipActivityDisabledReason(name){
+  if(name==='Capital Investment'){
+    const cap = capitalSettlement();
+    let hasBank = false;
+    if(cap) forEachPlacedStructure((def,slot,s)=>{ if(s===cap && def.name==='Bank') hasBank = true; });
+    if(!hasBank) return 'Needs a Bank in the capital.';
+  }
+  if(name==='Relocate Capital' && state.turn < state.relocateCapitalCooldownUntilTurn){
+    return `On cooldown until turn ${state.relocateCapitalCooldownUntilTurn}.`;
+  }
+  return null;
+}
 function openLeadershipActivityPicker(role){
   const l = state.leaders[role];
   const remaining = leadershipActivitiesRemaining(role);
@@ -1843,13 +2045,15 @@ function openLeadershipActivityPicker(role){
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
     <h3>${role} — ${escapeHtml(l.name)}</h3>
-    <div class="hint" style="margin-top:0;">${remaining} of ${leadershipActivityCap(role)} Leadership activities left this turn. Resolve the check at the table, then log which one — the same activity can't be repeated twice in one turn:</div>
+    <div class="hint" style="margin-top:0;">${remaining} of ${leadershipActivityCap(role)} Leadership activities left this turn. Most of these resolve automatically once you tell it the check's outcome — a few (marked "log only") still just need the table's result written down.</div>
     <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
       ${Object.entries(LEADERSHIP_ACTIVITIES).map(([name,def])=>{
         const already = usedNames.includes(name);
-        return `<button type="button" class="option-card" ${already?'style="opacity:.4;pointer-events:none;"':''} onclick="logLeadershipActivity('${role}','${escapeAttr(name)}')">
-          <div class="opt-name">${escapeHtml(name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${def.skills.join(' / ')})</span></div>
-          <div class="opt-detail">${already?'Already used this turn. ':''}${escapeHtml(def.note)}</div>
+        const disabledReason = already ? null : leadershipActivityDisabledReason(name);
+        const disabled = already || disabledReason;
+        return `<button type="button" class="option-card" ${disabled?'style="opacity:.4;pointer-events:none;"':''} onclick="startLeadershipActivity('${role}','${escapeAttr(name)}')">
+          <div class="opt-name">${escapeHtml(name)}${!def.outcomes?' <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(log only)</span>':''} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${def.skills.join(' / ')})</span></div>
+          <div class="opt-detail">${already?'Already used this turn. ':disabledReason?disabledReason+' ':''}${escapeHtml(def.note)}</div>
         </button>`;}).join('')}
     </div>
     <button class="ghost" style="margin-top:8px;" onclick="closeLeadershipOverlay()">Cancel</button>
@@ -1859,18 +2063,383 @@ function openLeadershipActivityPicker(role){
 function closeLeadershipOverlay(){
   const el = document.getElementById('leadership-overlay');
   if(el) el.remove();
+  const extra = document.getElementById('leadership-extra-overlay');
+  if(extra) extra.remove();
 }
+// Log-only path — used for activities with no `outcomes` table (Hire Adventurers, Focused
+// Attention) and as the fallback the mechanized path always ends at (finalizeLeadershipActivity).
 function logLeadershipActivity(role, activityName){
   if(leadershipActivitiesRemaining(role)<=0) return;
   if((state.leadershipUsedNames[role]||[]).includes(activityName)) return;
-  state.leadershipUsed[role] = (state.leadershipUsed[role]||0)+1;
-  state.leadershipUsedNames[role] = [...(state.leadershipUsedNames[role]||[]), activityName];
   const l = state.leaders[role];
   const def = LEADERSHIP_ACTIVITIES[activityName];
-  state.log.unshift({turn:state.turn, note:`Leadership — ${role} (${l.name||'vacant'}) used ${activityName} (${def.skills.join('/')}).`});
+  finalizeLeadershipActivity(role, activityName, `used ${activityName} (${def.skills.join('/')}).`, '');
+}
+function finalizeLeadershipActivity(role, name, text, mechNote){
+  const l = state.leaders[role];
+  state.leadershipUsed[role] = (state.leadershipUsed[role]||0)+1;
+  state.leadershipUsedNames[role] = [...(state.leadershipUsedNames[role]||[]), name];
+  state.log.unshift({turn:state.turn, note:`Leadership — ${role} (${l.name||'vacant'}) ${text}${mechNote}`});
   closeLeadershipOverlay();
   scheduleSave();
   render();
+}
+let leadershipRollCallback = null;
+function promptLeadershipRoll(title, hint, max, cb){
+  leadershipRollCallback = cb;
+  const overlay = document.createElement('div');
+  overlay.id = 'leadership-roll-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:115;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:320px;width:100%;margin:0;">
+    <h3>${escapeHtml(title)}</h3>
+    <div class="hint" style="margin-top:0;">${escapeHtml(hint)}</div>
+    <input class="num" type="number" min="0" ${max?`max="${max}"`:''} id="leadership-roll-input" placeholder="Rolled result">
+    <button class="action" style="margin-top:8px;" onclick="confirmLeadershipRoll(${max||0})">Confirm</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function confirmLeadershipRoll(max){
+  const v = parseInt(document.getElementById('leadership-roll-input').value,10);
+  if(isNaN(v) || v<0 || (max && v>max)){ alert('Enter a valid roll.'); return; }
+  document.getElementById('leadership-roll-overlay').remove();
+  const cb = leadershipRollCallback;
+  leadershipRollCallback = null;
+  if(cb) cb(v);
+}
+function startLeadershipActivity(role, name){
+  if(leadershipActivitiesRemaining(role)<=0) return;
+  if((state.leadershipUsedNames[role]||[]).includes(name)) return;
+  if(leadershipActivityDisabledReason(name)) return;
+  const def = LEADERSHIP_ACTIVITIES[name];
+  if(!def.outcomes){ closeLeadershipOverlay(); logLeadershipActivity(role, name); return; }
+  closeLeadershipOverlay();
+  if(name==='Relocate Capital'){ openLeadershipSettlementPicker(role, name); return; }
+  if(def.needsRuinInput){ openLeadershipRuinPicker(role, name); return; }
+  if(def.needsGoodInput){ openLeadershipGoodPicker(role, name); return; }
+  if(def.needsGroupInput || def.needsHexInput){ openLeadershipTextInput(role, name); return; }
+  openDegreePicker(name, d=>resolveLeadershipActivity(role, name, d, {}));
+}
+function openLeadershipRuinPicker(role, name){
+  const overlay = document.createElement('div');
+  overlay.id = 'leadership-extra-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:110;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:340px;width:100%;margin:0;">
+    <h3>${escapeHtml(name)} — which Ruin?</h3>
+    <div class="hint" style="margin-top:0;">Arts→Corruption, Trade→Crime, Engineering→Decay, Intrigue→Strife.</div>
+    <div class="boost-picker" style="margin-top:10px;">
+      ${['Corruption','Crime','Decay','Strife'].map(r=>`<button type="button" onclick="document.getElementById('leadership-extra-overlay').remove();openDegreePicker('${escapeAttr(name)}', d=>resolveLeadershipActivity('${role}','${escapeAttr(name)}',d,{ruin:'${r}'}))">${r}</button>`).join('')}
+    </div>
+    <button class="ghost" style="margin-top:10px;" onclick="document.getElementById('leadership-extra-overlay').remove();">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function openLeadershipGoodPicker(role, name){
+  const overlay = document.createElement('div');
+  overlay.id = 'leadership-extra-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:110;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:340px;width:100%;margin:0;">
+    <h3>${escapeHtml(name)} — pick a Commodity</h3>
+    <div class="hint" style="margin-top:0;">Costs 8 RP for Luxuries, 4 RP for anything else, spent up front.</div>
+    ${GOODS.map(g=>{ const cost = g==='Luxuries'?8:4; const short = state.rp<cost;
+      return `<button type="button" class="option-card" ${short?'style="opacity:.45;pointer-events:none;"':''} onclick="document.getElementById('leadership-extra-overlay').remove();state.rp-=${cost};state.rpSpentThisTurn=(state.rpSpentThisTurn||0)+${cost};openDegreePicker('${escapeAttr(name)}', d=>resolveLeadershipActivity('${role}','${escapeAttr(name)}',d,{good:'${g}'}))">
+        <div class="opt-name">${g} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${cost} RP${short?', not enough':''})</span></div>
+      </button>`;}).join('')}
+    <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('leadership-extra-overlay').remove();">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function openLeadershipSettlementPicker(role, name){
+  const cap = capitalSettlement();
+  const eligible = state.settlements.filter(s=>{
+    if(cap && s.id===cap.id) return false;
+    let hasBonus = false;
+    forEachPlacedStructure((def,slot,st)=>{ if(st===s && ['Castle','Palace','Town Hall'].includes(def.name)) hasBonus = true; });
+    return hasBonus;
+  });
+  const overlay = document.createElement('div');
+  overlay.id = 'leadership-extra-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:110;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:340px;width:100%;margin:0;">
+    <h3>${escapeHtml(name)} — new capital</h3>
+    <div class="hint" style="margin-top:0;">Only settlements with a Castle, Palace, or Town Hall qualify. All leaders will spend every Leadership activity they have left this turn on this.</div>
+    ${eligible.length ? eligible.map(s=>`<button type="button" class="option-card" onclick="startRelocateCapital('${role}',${s.id})">
+      <div class="opt-name">${escapeHtml(s.name)}</div>
+    </button>`).join('') : '<div class="hint" style="margin-top:0;">No settlement qualifies yet — needs a Castle, Palace, or Town Hall.</div>'}
+    <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('leadership-extra-overlay').remove();">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function startRelocateCapital(role, settlementId){
+  document.getElementById('leadership-extra-overlay').remove();
+  ROLES.forEach(([r])=>{ if(state.leaders[r].name && !state.leaders[r].vacant) state.leadershipUsed[r] = leadershipActivityCap(r); });
+  openDegreePicker('Relocate Capital', d=>resolveLeadershipActivity(role, 'Relocate Capital', d, {settlementId}));
+}
+function openLeadershipTextInput(role, name){
+  const def = LEADERSHIP_ACTIVITIES[name];
+  const overlay = document.createElement('div');
+  overlay.id = 'leadership-extra-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:110;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:340px;width:100%;margin:0;">
+    <h3>${escapeHtml(name)}</h3>
+    ${def.needsGroupInput ? `<div class="row"><div class="label">Group / faction${def.needsGroupInput==='optional'?' (optional)':''}</div><input type="text" class="wide" id="leadership-extra-group" placeholder="e.g. the Sootscale goblins"></div>` : ''}
+    ${def.needsHexInput ? `<div class="row"><div class="label">Their hex${def.needsHexInput==='optional'?' (optional)':''}</div><input type="text" class="wide" id="leadership-extra-hex" style="max-width:100px;" placeholder="e.g. F6"></div>` : ''}
+    <button class="action" style="margin-top:8px;" onclick="confirmLeadershipTextInput('${role}','${escapeAttr(name)}')">Continue</button>
+    <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('leadership-extra-overlay').remove();">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function confirmLeadershipTextInput(role, name){
+  const def = LEADERSHIP_ACTIVITIES[name];
+  const group = def.needsGroupInput ? (document.getElementById('leadership-extra-group').value||'').trim() : '';
+  if(def.needsGroupInput===true && !group){ alert('Enter a group or faction name.'); return; }
+  const hexInput = def.needsHexInput ? (document.getElementById('leadership-extra-hex').value||'').trim() : '';
+  let hex = null;
+  if(hexInput){
+    const parsed = parseHexLabel(hexInput);
+    if(!parsed){ alert("Couldn't read that hex label — try e.g. F6."); return; }
+    hex = parsed;
+  }
+  document.getElementById('leadership-extra-overlay').remove();
+  openDegreePicker(name, d=>resolveLeadershipActivity(role, name, d, {group, hex}));
+}
+// Mechanical resolution for every Leadership activity with an `outcomes` table — same
+// pattern as resolveCommerceActivity/resolveRegionActivity: apply real state changes, build
+// a mechNote showing the exact numbers (not just the outcome description), then log it.
+// Two consistent simplifications apply everywhere below, to stay faithful without inventing
+// UI the rest of the app doesn't have: "roll N Resource Dice, GAIN that RP" defers to
+// pendingBonusResourceDice (rolled together with next turn's Resource Dice step, exactly
+// how Commerce's Trade Commodities/Manage Trade Agreements already do it); RP/Unrest/
+// Commodity COSTS or immediate dice gains prompt an actual roll via promptLeadershipRoll,
+// same as the Ruin/Consumption steps already do.
+function resolveLeadershipActivity(role, name, degree, extra){
+  const def = LEADERSHIP_ACTIVITIES[name];
+  const text = def.outcomes[degree];
+  const finish = mechNote => finalizeLeadershipActivity(role, name, `used ${name}: ${text}`, mechNote||'');
+  const addGood = (g, amt) => { state.goods[g] = addWithCap(state.goods[g], amt, goodStorageCap(g)); };
+  switch(name){
+    case 'Pledge of Fealty': {
+      let note = '';
+      if(degree>=2 && extra.group && !state.diplomaticRelations.includes(extra.group)){
+        state.diplomaticRelations.push(extra.group); note += ` Added "${extra.group}" to Diplomatic Relations.`;
+      }
+      if(degree===3 && extra.hex){
+        const key = hexKey(extra.hex.col, extra.hex.row);
+        const h = state.hexes[key] || {name:'',note:'',resources:'',features:'',terrain:'',workSite:'',resourceFlag:false,type:''};
+        if(!CLAIMED_HEX_TYPES.includes(h.type)){ h.type='Claimed Territory'; state.hexes[key]=h; state.xp+=10; note += ` Claimed ${hexLabel(extra.hex.col,extra.hex.row)} (+10 XP).`; }
+      }
+      if(degree===2){
+        promptLeadershipRoll('Pledge of Fealty — integration cost', 'Roll 1 Resource Die — that RP is spent to integrate the group.', 12, v=>{
+          state.rp = Math.max(0, state.rp-v); state.rpSpentThisTurn = (state.rpSpentThisTurn||0)+v;
+          finish(note+` −${v} RP.`);
+        });
+        return;
+      }
+      if(degree===1){ state.unrest += 1; note += ' +1 Unrest.'; }
+      if(degree===0){ state.unrest += 2; note += ' +2 Unrest (pick a Ruin to raise +1 on the Abilities tab).'; }
+      finish(note);
+      return;
+    }
+    case 'Send Diplomatic Envoy': {
+      let note = '';
+      if(degree>=2 && extra.group){
+        if(!state.diplomaticRelations.includes(extra.group)) state.diplomaticRelations.push(extra.group);
+        note += ` Diplomatic relations established with "${extra.group}".`;
+        if(!state.diplomacyMilestoneClaimed){ state.xp += 60; state.diplomacyMilestoneClaimed = true; note += ' First-ever relations: +60 kingdom XP milestone.'; }
+      }
+      if(degree===0){
+        promptLeadershipRoll('Send Diplomatic Envoy — setback', 'Roll 1d4 Unrest.', 4, v=>{ state.unrest += v; finish(note+` +${v} Unrest.`); });
+        return;
+      }
+      finish(note);
+      return;
+    }
+    case 'Creative Solution': case 'Supernatural Solution': {
+      if(degree===3){ finish(''); return; }
+      const label = degree===2 ? '1d4' : '2d6';
+      const max = degree===2 ? 4 : 12;
+      promptLeadershipRoll(`${name} — research cost`, `Roll ${label} RP to spend.`, max, v=>{
+        state.rp = Math.max(0, state.rp-v); state.rpSpentThisTurn = (state.rpSpentThisTurn||0)+v;
+        finish(` −${v} RP.`);
+      });
+      return;
+    }
+    case 'Provide Care': {
+      let note = '';
+      if(degree===3){ state.unrest = Math.max(0, state.unrest-1); note = ' −1 Unrest (pick a Ruin to lower −1 on the Abilities tab too).'; }
+      else if(degree===2){ state.unrest = Math.max(0, state.unrest-1); note = ' −1 Unrest.'; }
+      else if(degree===0){ state.unrest += 1; note = ' +1 Unrest.'; }
+      finish(note);
+      return;
+    }
+    case 'Quell Unrest': {
+      if(degree===3){ promptLeadershipRoll('Quell Unrest', 'Roll 1d6 Unrest reduction.', 6, v=>{ state.unrest = Math.max(0, state.unrest-v); finish(` −${v} Unrest.`); }); return; }
+      if(degree===2){ state.unrest = Math.max(0, state.unrest-1); finish(' −1 Unrest.'); return; }
+      if(degree===0){ promptLeadershipRoll('Quell Unrest — backfire', 'Roll 1d4 Unrest gained.', 4, v=>{ state.unrest += v; finish(` +${v} Unrest.`); }); return; }
+      finish('');
+      return;
+    }
+    case 'Repair Reputation': {
+      const ruin = extra.ruin;
+      if(degree===3){ ruinAdjust(ruin,-2); state.ruin[ruin].penalty = Math.max(0, state.ruin[ruin].penalty-1); finish(` ${ruin} −2, penalty −1.`); return; }
+      if(degree===2){ ruinAdjust(ruin,-1); finish(` ${ruin} −1.`); return; }
+      if(degree===0){ promptLeadershipRoll('Repair Reputation — backfire', 'Roll 1d4 Unrest.', 4, v=>{ state.unrest += v; finish(` +${v} Unrest.`); }); return; }
+      finish('');
+      return;
+    }
+    case 'Request Foreign Aid': {
+      if(degree===3){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+2; finish(' +2 bonus Resource Dice next turn.'); return; }
+      if(degree===2){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+1; finish(' +1 bonus Resource Die next turn (or take a +2 check bonus instead, your choice).'); return; }
+      if(degree===1){
+        promptLeadershipRoll('Request Foreign Aid — delayed aid', 'Roll 1d4 RP, credited next turn.', 4, v=>{
+          state.pendingBonusRP = (state.pendingBonusRP||0)+v; finish(` +${v} RP next turn.`);
+        });
+        return;
+      }
+      promptLeadershipRoll('Request Foreign Aid — refused', 'Roll 1d4 Unrest.', 4, v=>{ state.unrest += v; finish(` +${v} Unrest.`); });
+      return;
+    }
+    case 'Rest and Relax': {
+      if(degree===3 || degree===2){ state.unrest = Math.max(0, state.unrest-1); finish(' −1 Unrest.'); return; }
+      finish('');
+      return;
+    }
+    case 'Celebrate Holiday': {
+      if(degree===3){ finish(''); return; }
+      if(degree===2 || degree===1){
+        promptLeadershipRoll('Celebrate Holiday — cost', 'Roll 1 Resource Die to spend.', 12, v=>{
+          if(state.rp<v){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)-4; finish(` Couldn't cover ${v} RP — downgraded to critical failure (−4 Resource Dice next turn).`); return; }
+          state.rp -= v; state.rpSpentThisTurn = (state.rpSpentThisTurn||0)+v;
+          finish(` −${v} RP.`);
+        });
+        return;
+      }
+      state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)-4;
+      finish(' −4 Resource Dice next turn.');
+      return;
+    }
+    case 'Craft Luxuries': {
+      if(degree===3){ promptLeadershipRoll('Craft Luxuries', 'Roll 1d4 Luxuries gained.', 4, v=>{ addGood('Luxuries', v); finish(` +${v} Luxuries.`); }); return; }
+      if(degree===2){ addGood('Luxuries', 1); finish(' +1 Luxuries.'); return; }
+      finish('');
+      return;
+    }
+    case 'Create a Masterpiece': {
+      if(degree===3){ state.fame = Math.min(state.fameMax, state.fame+2); state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+2; finish(` +2 ${state.fameType}, +2 bonus Resource Dice next turn.`); return; }
+      if(degree===2){ state.fame = Math.min(state.fameMax, state.fame+1); finish(` +1 ${state.fameType}.`); return; }
+      if(degree===0){
+        if(state.fame>0){ state.fame -= 1; finish(` −1 ${state.fameType}.`); return; }
+        promptLeadershipRoll('Create a Masterpiece — backfire', `No ${state.fameType} to lose — roll 1d4 Unrest instead.`, 4, v=>{ state.unrest += v; finish(` +${v} Unrest.`); });
+        return;
+      }
+      finish('');
+      return;
+    }
+    case 'Establish Trade Agreement': {
+      if(degree===3){ state.tradeAgreements = (state.tradeAgreements||0)+1; state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+2; finish(' +1 Trade Agreement, +2 bonus Resource Dice next turn.'); return; }
+      if(degree===2){ state.tradeAgreements = (state.tradeAgreements||0)+1; finish(' +1 Trade Agreement.'); return; }
+      if(degree===0){ state.unrest += 1; finish(' +1 Unrest.'); return; }
+      // failure: real player choice — pay to still succeed, or let it fail
+      const overlay = document.createElement('div');
+      overlay.id = 'leadership-extra-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:112;display:flex;align-items:center;justify-content:center;padding:20px;';
+      overlay.innerHTML = `<div class="card" style="max-width:320px;width:100%;margin:0;">
+        <h3>Establish Trade Agreement — failed</h3>
+        <div class="hint" style="margin-top:0;">Pay 2 Resource Dice worth of RP to still succeed, or let it fail this turn.</div>
+        <button class="action" onclick="document.getElementById('leadership-extra-overlay').remove();promptLeadershipRoll('Pay to succeed','Roll 2 Resource Dice to spend.',24,v=>{state.rp=Math.max(0,state.rp-v);state.rpSpentThisTurn=(state.rpSpentThisTurn||0)+v;state.tradeAgreements=(state.tradeAgreements||0)+1;finalizeLeadershipActivity('${role}','${escapeAttr(name)}','used ${escapeAttr(name)}: paid to succeed anyway.',' −'+v+' RP, +1 Trade Agreement.');})">Pay to succeed</button>
+        <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('leadership-extra-overlay').remove();finalizeLeadershipActivity('${role}','${escapeAttr(name)}','used ${escapeAttr(name)}: let it fail this turn.','')">Let it fail</button>
+      </div>`;
+      document.body.appendChild(overlay);
+      return;
+    }
+    case 'Capital Investment': {
+      if(degree===3){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+4; finish(' +4 bonus Resource Dice next turn.'); return; }
+      if(degree===2){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+2; finish(' +2 bonus Resource Dice next turn.'); return; }
+      if(degree===1){ promptLeadershipRoll('Capital Investment', 'Roll 1d4 RP gained.', 4, v=>{ state.rp += v; finish(` +${v} RP.`); }); return; }
+      promptLeadershipRoll('Capital Investment — risky', 'Roll 1 Resource Die — gain that RP, but add the same to Crime.', 12, v=>{
+        state.rp += v; ruinAdjust('Crime', v); finish(` +${v} RP, Crime +${v}.`);
+      });
+      return;
+    }
+    case 'Clandestine Business': {
+      if(degree===3){
+        state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+2;
+        promptLeadershipRoll('Clandestine Business', 'Roll 1d4 Luxuries gained.', 4, v=>{ addGood('Luxuries', v); finish(` +2 bonus Resource Dice next turn, +${v} Luxuries.`); });
+        return;
+      }
+      if(degree===2){
+        const overlay = document.createElement('div');
+        overlay.id = 'leadership-extra-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:112;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `<div class="card" style="max-width:320px;width:100%;margin:0;">
+          <h3>Clandestine Business</h3>
+          <div class="hint" style="margin-top:0;">Take the RP or the Luxuries — either way, +1 Unrest.</div>
+          <button class="action" onclick="document.getElementById('leadership-extra-overlay').remove();state.unrest+=1;state.pendingBonusResourceDice=(state.pendingBonusResourceDice||0)+2;finalizeLeadershipActivity('${role}','${escapeAttr(name)}','used ${escapeAttr(name)}: ${text}',' +2 bonus Resource Dice next turn, +1 Unrest.')">Take the RP</button>
+          <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('leadership-extra-overlay').remove();promptLeadershipRoll('Clandestine Business','Roll 1d4 Luxuries gained.',4,v=>{addGood('Luxuries',v);state.unrest+=1;finalizeLeadershipActivity('${role}','${escapeAttr(name)}','used ${escapeAttr(name)}: ${text}',' +'+v+' Luxuries, +1 Unrest.');})">Take the Luxuries</button>
+        </div>`;
+        document.body.appendChild(overlay);
+        return;
+      }
+      if(degree===1){
+        state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0)+1;
+        state.unrest += 1; ruinAdjust('Corruption', 1);
+        finish(' +1 bonus Resource Die next turn, +1 Unrest, Corruption +1.');
+        return;
+      }
+      promptLeadershipRoll('Clandestine Business — exposed', 'Roll 1d6 Unrest.', 6, v=>{
+        state.unrest += v; ruinAdjust('Corruption', 2);
+        finish(` +${v} Unrest, Corruption +2 (pick another Ruin to raise +1 on the Abilities tab).`);
+      });
+      return;
+    }
+    case 'Purchase Commodities': {
+      const good = extra.good;
+      if(degree===3){
+        addGood(good, 4);
+        const other = GOODS.find(g=>g!==good && g!=='Luxuries') || GOODS.find(g=>g!==good);
+        addGood(other, 2);
+        finish(` +4 ${good}, +2 ${other}.`);
+        return;
+      }
+      if(degree===2){ addGood(good, 2); finish(` +2 ${good}.`); return; }
+      if(degree===1){ addGood(good, 1); finish(` +1 ${good}.`); return; }
+      finish(' Nothing gained — the RP was already spent.');
+      return;
+    }
+    case 'Relocate Capital': {
+      state.relocateCapitalCooldownUntilTurn = state.turn + 3;
+      const target = state.settlements.find(s=>s.id===extra.settlementId);
+      const doMove = ()=>{
+        if(!target) return;
+        const cap = capitalSettlement();
+        if(cap && cap.col!==undefined){ const oldKey = hexKey(cap.col,cap.row); if(state.hexes[oldKey]) state.hexes[oldKey].type = 'Settlement'; }
+        if(target.col!==undefined){ const newKey = hexKey(target.col,target.row); state.hexes[newKey] = state.hexes[newKey]||{name:target.name,note:'',resources:'',features:'',terrain:'',workSite:'',resourceFlag:false}; state.hexes[newKey].type = 'Capital'; }
+      };
+      if(degree===3){ doMove(); finish(` Capital moved to ${target?escapeHtml(target.name):'the new settlement'}, no penalty.`); return; }
+      if(degree===2){ doMove(); state.unrest += 1; finish(` Capital moved to ${target?escapeHtml(target.name):'the new settlement'}. +1 Unrest.`); return; }
+      if(degree===1){ state.unrest += 1; finish(' Move failed. +1 Unrest (pick two Ruins to raise +1 on the Abilities tab).'); return; }
+      promptLeadershipRoll('Relocate Capital — disaster', 'Roll 1d4 Unrest.', 4, v=>{
+        state.unrest += v; finish(` Move failed badly. +${v} Unrest (pick three Ruins +1, a fourth +3, on the Abilities tab).`);
+      });
+      return;
+    }
+    case 'Infiltration': {
+      if(degree===3){ promptLeadershipRoll('Infiltration', 'Roll 1d4 Unrest reduction.', 4, v=>{ state.unrest = Math.max(0, state.unrest-v); finish(` −${v} Unrest.`); }); return; }
+      if(degree===2){ state.unrest = Math.max(0, state.unrest-1); finish(' −1 Unrest.'); return; }
+      finish('');
+      return;
+    }
+    case 'Prognostication': {
+      if(degree===0){
+        if(state.turnWizard){ state.turnWizard.forceRandomEvent = true; finish(' A random event will trigger automatically this Event phase.'); }
+        else finish(' No Kingdom Turn in progress — remember to force an event when you next open the Event phase.');
+        return;
+      }
+      finish('');
+      return;
+    }
+    default:
+      finish('');
+  }
 }
 function renderLeadershipActivitiesCard(){
   ensureLeadershipTurnFresh();
@@ -1879,7 +2448,7 @@ function renderLeadershipActivitiesCard(){
   const active = ROLES.filter(([r])=>state.leaders[r].name && !state.leaders[r].vacant);
   document.getElementById('leadership-activities-card').innerHTML = `<div class="card">
     <div class="card-head-row"><h3 style="margin-bottom:0;">Leadership Activities</h3><span class="pill">${cap}/turn each${capBonus?' · Castle/Palace/Town Hall':''}</span></div>
-    <div class="hint" style="margin-top:0;">Reference only — pick what a leader did this turn after resolving the check at the table. Logged to the turn log below on Overview.</div>
+    <div class="hint" style="margin-top:0;">Pick what a leader did after resolving the check at the table — most activities apply their RP/Unrest/Ruin/Commodity effects automatically from there. Logged to the turn log below on Overview.</div>
     ${active.length ? active.map(([role])=>{
       const l = state.leaders[role];
       const remaining = leadershipActivitiesRemaining(role);
@@ -1891,6 +2460,7 @@ function renderLeadershipActivitiesCard(){
         </div>
       </div>`;
     }).join('') : `<div class="hint" style="margin-top:0;">No leaders assigned yet — fill a role above first.</div>`}
+    ${state.diplomaticRelations.length ? `<div class="hint" style="margin-top:8px;"><b style="color:var(--text);">Diplomatic Relations:</b> ${state.diplomaticRelations.map(escapeHtml).join(', ')}</div>` : ''}
   </div>`;
 }
 
@@ -2731,6 +3301,13 @@ function renderEventPhaseBody(){
       <button class="action" style="margin-top:10px;" onclick="finishKingdomTurn()">Finish Turn</button>`;
   }
   if(e.checked===undefined || e.checked===null){
+    if(state.turnWizard.forceRandomEvent){
+      state.turnWizard.forceRandomEvent = false;
+      state.eventDC = 16;
+      state.turnWizard.event = {checked:'forced', priorDC:'forced (Prognostication)', triggered:true};
+      scheduleSave();
+      return renderEventPhaseBody();
+    }
     return `<h3>Event</h3>
       <div class="hint" style="margin-top:0;">Attempt a DC ${state.eventDC} flat check. On a hit, a random kingdom event occurs this turn.</div>
       <input class="num" type="number" id="event-dc-roll" min="1" max="20" placeholder="d20 result">
