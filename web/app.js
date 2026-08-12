@@ -31,6 +31,111 @@ const LEADERSHIP_ACTIVITIES = {
   'Send Diplomatic Envoy':    {skills:['Statecraft'], note:'Trained.'},
   'Supernatural Solution':    {skills:['Magic'], note:'Untrained. Success costs 1d4 RP researching it; failure costs 2d6 RP.'}
 };
+// Commerce Phase activities (2e.aonprd.com/Rules.aspx?ID=1800) — each may be attempted
+// once per Kingdom turn independently of the others (not a shared pool), skill/trait and
+// outcome text confirmed individually against each activity's own Actions.aspx page.
+// Degrees with no listed effect on AoN (this is a beneficial-only activity) show 'No effect.'
+const COMMERCE_ACTIVITIES = {
+  'Collect Taxes': {
+    skill:'Trade (Trained)', note:'Basic check.',
+    outcomes:{
+      3:'+2 circumstance bonus to Economy-based checks for the remainder of the Kingdom turn.',
+      2:'+1 circumstance bonus to Economy-based checks for the remainder of the Kingdom turn. +1 Unrest if you also Collected Taxes last turn.',
+      1:'As success — the bonus still applies — but +1 Unrest (+2 if you also Collected Taxes last turn).',
+      0:'Taxes are still gathered for essential needs, but citizens are angered: +2 Unrest, and +1 to a Ruin of your choice.'
+    }
+  },
+  'Improve Lifestyle': {
+    skill:'Politics (Untrained)', note:'Basic check.',
+    outcomes:{
+      3:'+2 circumstance bonus to Culture-based checks for the remainder of the Kingdom turn.',
+      2:'+1 circumstance bonus to Culture-based checks for the remainder of the Kingdom turn.',
+      1:'As success, but also a −1 circumstance penalty to Economy-based checks for the remainder of the Kingdom turn.',
+      0:'−1 circumstance penalty to Economy-based checks for the remainder of the Kingdom turn, +1 Unrest, and +1 to a Ruin of your choice.'
+    }
+  },
+  'Tap Treasury': {
+    skill:'Statecraft (Untrained)', note:'Basic check. A Bank structure grants a +1 item bonus.',
+    outcomes:{
+      3:'Withdraw a significant sum (or fund the unexpected event that required tapping the treasury).',
+      2:'As critical success, but overdraw the treasury — −1 circumstance penalty to all Economy-based checks until the end of your next Kingdom turn.',
+      1:'Fail to secure the funds — −1 circumstance penalty to all Loyalty- and Economy-based checks until the end of your next Kingdom turn.',
+      0:'As failure, and the rumors spiral: +1 Unrest and +1 to a Ruin of your choice.'
+    }
+  },
+  'Trade Commodities': {
+    skill:'Industry (Untrained)', note:'Pick a Commodity your kingdom stockpiles and reduce it by up to 4, then attempt a basic check.', needsGoodPicker:true,
+    outcomes:{
+      3:'Gain 2 bonus Resource Dice per point of stockpile expended, at the start of your next Kingdom turn.',
+      2:'Gain 1 bonus Resource Die per point of stockpile expended, at the start of your next Kingdom turn.',
+      1:'Gain 1 bonus Resource Die at the start of your next Kingdom turn, regardless of how much was expended.',
+      0:'Gain no bonus Resource Dice — the Commodity remains depleted.'
+    }
+  },
+  'Manage Trade Agreements': {
+    skill:'Trade (Untrained)', note:'Requires at least one existing trade agreement.',
+    outcomes:{
+      3:'At the start of your next Kingdom turn: 1 bonus Resource Die and 1 Commodity of your choice, per trade agreement (no more than half Luxuries).',
+      2:'As critical success, but choose either the Resource Dice or the Commodities, not both.',
+      1:'Gain 1 RP per trade agreement at the start of your next Kingdom turn.',
+      0:"Gain no benefit, and you can't Manage Trade Agreements next Kingdom turn."
+    }
+  }
+};
+// Region Phase activities (2e.aonprd.com/Rules.aspx?ID=1805, "up to three Region
+// activities" shared kingdom-wide per turn) — RP cost for the terrain ones is looked up
+// from WORK_SITE_TERRAIN_RP_COST by the target hex's terrain at resolution time, per the
+// "Building on Rough Terrain" table (Rules.aspx?ID=1775), same as Establish Work Site.
+const REGION_ACTIVITIES = {
+  'Claim Hex': {
+    skill:'Exploration, Intrigue, Magic, or Wilderness', rpCost:1, note:'Hex must be reconnoitered and adjacent to kingdom territory; clear hazards/monsters first.',
+    outcomes:{
+      3:'Claim the hex, increase Size by 1, and immediately attempt another Region activity. (+10 kingdom XP)',
+      2:'Claim the hex and increase Size by 1. (+10 kingdom XP)',
+      1:'Fail to claim the hex.',
+      0:'Fail to claim the hex; −1 circumstance penalty to Stability-based checks until the end of your next Kingdom turn.'
+    }
+  },
+  'Clear Hex': {
+    skill:'Engineering (to prepare/demolish) or Exploration (to remove a hazard/encounter)', rpCost:'terrain', note:'RP cost by the hex’s most inhospitable terrain feature.',
+    outcomes:{
+      3:'Clear the hex; refund half the RP spent. If removing dangerous creatures (not a hazard), also recover 2 Luxuries as treasure.',
+      2:'Clear the hex.', 1:'Fail to clear the hex.',
+      0:'Catastrophic failure — several workers die. Gain 1 Unrest.'
+    }
+  },
+  'Fortify Hex': {
+    skill:'Defense (Untrained)', rpCost:'terrain', note:'Hex must be claimed and have no settlement in it.',
+    outcomes:{
+      3:'Refund half the RP spent, then reduce Unrest by 1.', 2:'Reduce Unrest by 1.',
+      1:'Fail to fortify the hex.', 0:'Gain 1 Unrest.'
+    }
+  },
+  'Build Roads': {
+    skill:'Engineering (Untrained)', rpCost:'terrain', note:'Hex must be claimed. Double the RP cost if a river crosses the hex (to also bridge it).',
+    outcomes:{
+      3:"Build roads into the target hex and one adjacent claimed hex without roads whose terrain is at least as hospitable (otherwise, as success).",
+      2:'Build roads in the hex.', 1:'Fail to build roads in the hex.',
+      0:'Disaster — lose several workers. Gain 1 Unrest.'
+    }
+  },
+  'Establish Farmland': {
+    skill:'Agriculture', rpCost:'farmland', note:'Plains or hills must be the predominant terrain, and the hex must be in a settlement’s influence. Plains: 1 RP vs Control DC. Hills: 2 RP vs Control DC+5.',
+    outcomes:{
+      3:'Establish two adjacent Farmland hexes instead of one (extra hex must be plains, or hills if the target was hills). If none available, treat as success.',
+      2:'Establish one Farmland hex.', 1:'Fail to establish a Farmland hex.',
+      0:'Fail, and risk a Crop Failure — DC 6 flat check at the start of each of the next two Event phases; on a failure, a Crop Failure event hits this hex and its neighbors.'
+    }
+  },
+  'Irrigation': {
+    skill:'Engineering (Trained)', rpCost:'terrain', note:'Hex must be adjacent to a river or lake and not itself contain one.',
+    outcomes:{
+      3:'The hex gains a river/lake terrain feature (or downgrades a prior critical-failure Irrigation attempt here to a failure); refund half the RP spent.',
+      2:'The hex gains a river/lake terrain feature.', 1:'Fail — no river/lake feature gained.',
+      0:'Fail, and it becomes a disease breeding ground — gain 1 Unrest; DC 4 flat check each Event phase (rising 1 per critically-failed Irrigation hex) or a Plague event occurs.'
+    }
+  }
+};
 const GOODS = ['Food','Lumber','Ore','Stone','Luxuries'];
 const GOODS_ICON = {Food:'●', Lumber:'▲', Ore:'■', Stone:'◆', Luxuries:'✦'};
 const GOVERNMENTS = {
@@ -764,20 +869,74 @@ function effectiveRuinPenalty(name){
   return r.penalty + Math.floor((r.points + structureRuinBonus(name)) / r.threshold);
 }
 function goodStorageCap(g){ return sizeRow(state.size).storage + structureStorageBonus(g); }
+// Settlement base Consumption by type (2e.aonprd.com/Rules.aspx?ID=1823, "Settlement
+// Types" table) and each type's influence radius in hexes (same page) — a Farmland hex
+// only reduces Consumption while it lies within some settlement's influence.
+const SETTLEMENT_BASE_CONSUMPTION = {Village:1, Town:2, City:4, Metropolis:6};
+const SETTLEMENT_INFLUENCE_RADIUS = {Village:0, Town:1, City:2, Metropolis:3};
+function settlementConsumptionTotal(){
+  return state.settlements.reduce((sum,s)=>sum+(SETTLEMENT_BASE_CONSUMPTION[s.type]||1), 0);
+}
+// state.consumption tracks army Consumption only (see DEFAULT_STATE) — this wrapper just
+// names that clearly at the call site.
+function armyConsumptionTotal(){ return state.consumption; }
+// BFS hex distance over the same offset-coordinate neighbor function the war-encounter
+// map already uses (hexNeighbors) — cheap for the small radii (0-3) influence needs.
+function hexDistanceOffset(col1,row1,col2,row2){
+  if(col1===col2 && row1===row2) return 0;
+  let frontier = [[col1,row1]];
+  const seen = new Set([hexKey(col1,row1)]);
+  for(let dist=1; dist<=6; dist++){
+    const next = [];
+    for(const [c,r] of frontier){
+      for(const [nc,nr] of hexNeighbors(c,r)){
+        if(nc===col2 && nr===row2) return dist;
+        const k = hexKey(nc,nr);
+        if(seen.has(k)) continue;
+        seen.add(k);
+        next.push([nc,nr]);
+      }
+    }
+    frontier = next;
+  }
+  return Infinity;
+}
 function hexConsumptionReduction(){
   let total = 0;
-  Object.values(state.hexes).forEach(h=>{
+  Object.entries(state.hexes).forEach(([key,h])=>{
     if(!h || !h.workSite) return;
     const def = HEX_WORK_SITES[h.workSite];
-    if(def && def.consumptionReduction) total += def.consumptionReduction;
+    if(!def || !def.consumptionReduction) return;
+    const [col,row] = key.split('_').map(Number);
+    const influenced = state.settlements.some(s=> s.col!==undefined && hexDistanceOffset(s.col,s.row,col,row) <= (SETTLEMENT_INFLUENCE_RADIUS[s.type]??0));
+    if(influenced) total += def.consumptionReduction;
   });
   return total;
 }
-// Consumption owed this turn — base tracked value minus live reductions (Stockyard
-// structures, Farmland hexes), floored at 0. See the Upkeep wizard's Consumption step.
+// Consumption owed this turn — settlement + army Consumption, minus live reductions
+// (Stockyard-style structures, in-influence Farmland hexes), floored at 0.
 function effectiveConsumptionOwed(){
-  return Math.max(0, state.consumption - structureConsumptionBonus() - hexConsumptionReduction());
+  const base = settlementConsumptionTotal() + armyConsumptionTotal();
+  return Math.max(0, base - structureConsumptionBonus() - hexConsumptionReduction());
 }
+// A settlement is Overcrowded when its filled blocks outnumber its Residential lots
+// (2e.aonprd.com/Rules.aspx?ID=1824) — it needs 1 Residential lot per block that has any
+// structure in it, not one per block that's merely unlocked.
+function overcrowdedSettlements(){
+  return state.settlements.filter(s=>{
+    const blocks = [...s.grid.lots.slice(0,s.grid.blocks), ...s.grid.lots2.slice(0,s.grid.blocks2)];
+    const filledBlocks = blocks.filter(block=>block.some(Boolean)).length;
+    if(!filledBlocks) return false;
+    let residentialLots = 0;
+    blocks.forEach(block=>block.forEach(slot=>{
+      if(!slot) return;
+      const def = KM_STRUCTURES.find(x=>x.name===slot.name);
+      if(def && (def.category||[]).includes('Residential')) residentialLots++;
+    }));
+    return residentialLots < filledBlocks;
+  });
+}
+function inAnarchy(){ return state.unrest>=20; }
 
 /* =====================================================================
    STATE
@@ -785,8 +944,12 @@ function effectiveConsumptionOwed(){
 let state = null;
 const DEFAULT_STATE = () => ({
   started:false,
-  name:'Unnamed Realm', playerCharacter:'', level:1, xp:0, size:1, unrest:0, consumption:0, turn:1,
-  fameType:'Fame', fame:0, fameMax:3, rp:0, turnUpkeep:null, leadershipTurn:0, leadershipUsed:{},
+  name:'Unnamed Realm', playerCharacter:'', level:1, xp:0, size:1, unrest:0,
+  // consumption is army Consumption only now — settlement Consumption is computed fresh
+  // each time from settlementConsumptionTotal(), same spirit as claimedHexCount() for Size.
+  consumption:0, turn:1, atWar:false, eventDC:16, taxesCollectedLastTurn:false,
+  fameType:'Fame', fame:0, fameMax:3, rp:0, turnWizard:null, leadershipTurn:0, leadershipUsed:{}, leadershipUsedNames:{},
+  rpSpentThisTurn:0, milestoneRP100Claimed:false, pendingBonusResourceDice:0, pendingBonusRP:0, tradeAgreements:0,
   creation:{charter:'', charterFreeBoost:'', heartland:'', government:'', governmentFreeBoost:'', bonusBoost1:'', bonusBoost2:''},
   levelBoosts:[],
   kingdomFeats:[],
@@ -1058,8 +1221,10 @@ const INFO_TIPS = {
   Strife:   'Ruin from discord, factionalism, and conflict. Linked to Loyalty — high Strife drags down Loyalty-based checks.',
   'Control DC': "The difficulty for most kingdom-wide checks — your kingdom level's base DC, adjusted by its Size.",
   RP: 'Resource Points — the kingdom\'s spendable resource. Refilled by Resource Dice each turn (Upkeep), spent on structures, Work Sites, army gear, and recruitment/training costs.',
-  Unrest: 'Kingdom-wide unhappiness. High Unrest imposes a penalty on kingdom skill checks and, at 10+, causes Ruin to accumulate each Upkeep.',
-  Consumption: "Food owed each turn during Upkeep. Paid from the Food stockpile; unpaid Consumption costs 5 RP per point or raises Unrest by 1d4.",
+  Unrest: 'Kingdom-wide unhappiness. High Unrest imposes a penalty on kingdom skill checks, causes Ruin to accumulate each Upkeep at 10+, and pushes the kingdom into Anarchy at 20+.',
+  Consumption: "Food owed each turn during Upkeep — settlement Consumption (by size) plus army Consumption, minus storage-bonus structures and in-influence Farmland hexes. Paid from the Food stockpile; unpaid Consumption costs 5 RP per point or raises Unrest by 1d4.",
+  Overcrowded: "A settlement lacking enough Residential lots — it needs 1 Residential lot per block that has any structure built in it. An Overcrowded settlement adds +1 Unrest each Upkeep.",
+  'At War': "A kingdom-wide flag you set manually. While at war, Upkeep's Adjust Unrest step adds +1 Unrest, and Army Activities become available during the Activity phase.",
   Ruler: 'Leadership role tied to Loyalty — traditionally the head of state.', Counselor: 'Leadership role tied to Culture — the voice of scholars, priests, and advisors.',
   General: 'Leadership role tied to Stability — commands the kingdom\'s military affairs.', Emissary: 'Leadership role tied to Loyalty — the kingdom\'s face in diplomacy.',
   Magister: 'Leadership role tied to Culture — oversees arcane and magical matters.', Treasurer: 'Leadership role tied to Economy — manages the kingdom\'s finances.',
@@ -1439,9 +1604,9 @@ function renderOverview(){
     </div>
 
     <div class="card">
-      <div class="card-head-row"><h3 style="margin-bottom:0;">Upkeep</h3>${state.turnUpkeep ? `<span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">step ${state.turnUpkeep.step+1} of 5</span>` : ''}</div>
-      <div class="hint" style="margin-top:0;">Walks through Fame, Ruin, Resource Dice, Work Site production, and Consumption for this turn. You can close it partway through and resume later — nothing is lost.</div>
-      <button class="action" onclick="openTurnUpkeepWizard()">${state.turnUpkeep ? 'Resume Process Turn' : 'Process Turn'}</button>
+      <div class="card-head-row"><h3 style="margin-bottom:0;">Kingdom Turn</h3>${state.turnWizard ? `<span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">Phase ${WIZARD_PHASES.indexOf(state.turnWizard.phase)+1} of 4</span>` : ''}</div>
+      <div class="hint" style="margin-top:0;">Walks through all four Kingdom turn phases — Upkeep, Commerce, Activity, and Event. You can close it at any point (even mid-phase, to go build something on another tab) and resume exactly where you left off.</div>
+      <button class="action" onclick="openKingdomTurnWizard()">${state.turnWizard ? 'Resume Kingdom Turn' : 'Start Kingdom Turn'}</button>
     </div>
 
     <div class="card">
@@ -1655,28 +1820,37 @@ function capitalHasLeadershipBonusStructure(){
   return found;
 }
 function ensureLeadershipTurnFresh(){
-  if(state.leadershipTurn !== state.turn){ state.leadershipTurn = state.turn; state.leadershipUsed = {}; }
+  if(state.leadershipTurn !== state.turn){ state.leadershipTurn = state.turn; state.leadershipUsed = {}; state.leadershipUsedNames = {}; }
 }
-function leadershipActivityCap(){ return capitalHasLeadershipBonusStructure() ? 3 : 2; }
+// Base cap is 2 (3 with a Castle/Palace/Town Hall in the capital); a role that forfeited
+// one of its three activities during Upkeep Step 1 (missed downtime — see the Kingdom
+// Turn wizard) has that cap reduced by 1 for this turn only.
+function leadershipActivityCap(role){
+  const base = capitalHasLeadershipBonusStructure() ? 3 : 2;
+  const forfeit = state.turnWizard && state.turnWizard.upkeep.leadership && role && state.turnWizard.upkeep.leadership.forfeit.includes(role);
+  return Math.max(0, base - (forfeit?1:0));
+}
 function leadershipActivitiesRemaining(role){
   ensureLeadershipTurnFresh();
-  return Math.max(0, leadershipActivityCap() - (state.leadershipUsed[role]||0));
+  return Math.max(0, leadershipActivityCap(role) - (state.leadershipUsed[role]||0));
 }
 function openLeadershipActivityPicker(role){
   const l = state.leaders[role];
   const remaining = leadershipActivitiesRemaining(role);
+  const usedNames = state.leadershipUsedNames[role]||[];
   const overlay = document.createElement('div');
   overlay.id = 'leadership-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
     <h3>${role} — ${escapeHtml(l.name)}</h3>
-    <div class="hint" style="margin-top:0;">${remaining} of ${leadershipActivityCap()} Leadership activities left this turn. Resolve the check at the table, then log which one:</div>
+    <div class="hint" style="margin-top:0;">${remaining} of ${leadershipActivityCap(role)} Leadership activities left this turn. Resolve the check at the table, then log which one — the same activity can't be repeated twice in one turn:</div>
     <div style="margin-top:8px;max-height:55vh;overflow-y:auto;">
-      ${Object.entries(LEADERSHIP_ACTIVITIES).map(([name,def])=>`
-        <button type="button" class="option-card" onclick="logLeadershipActivity('${role}','${escapeAttr(name)}')">
+      ${Object.entries(LEADERSHIP_ACTIVITIES).map(([name,def])=>{
+        const already = usedNames.includes(name);
+        return `<button type="button" class="option-card" ${already?'style="opacity:.4;pointer-events:none;"':''} onclick="logLeadershipActivity('${role}','${escapeAttr(name)}')">
           <div class="opt-name">${escapeHtml(name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${def.skills.join(' / ')})</span></div>
-          <div class="opt-detail">${escapeHtml(def.note)}</div>
-        </button>`).join('')}
+          <div class="opt-detail">${already?'Already used this turn. ':''}${escapeHtml(def.note)}</div>
+        </button>`;}).join('')}
     </div>
     <button class="ghost" style="margin-top:8px;" onclick="closeLeadershipOverlay()">Cancel</button>
   </div>`;
@@ -1688,7 +1862,9 @@ function closeLeadershipOverlay(){
 }
 function logLeadershipActivity(role, activityName){
   if(leadershipActivitiesRemaining(role)<=0) return;
+  if((state.leadershipUsedNames[role]||[]).includes(activityName)) return;
   state.leadershipUsed[role] = (state.leadershipUsed[role]||0)+1;
+  state.leadershipUsedNames[role] = [...(state.leadershipUsedNames[role]||[]), activityName];
   const l = state.leaders[role];
   const def = LEADERSHIP_ACTIVITIES[activityName];
   state.log.unshift({turn:state.turn, note:`Leadership — ${role} (${l.name||'vacant'}) used ${activityName} (${def.skills.join('/')}).`});
@@ -1710,7 +1886,7 @@ function renderLeadershipActivitiesCard(){
       return `<div class="row">
         <div class="label">${role}<small>${l.pcHeld?'★ ':''}${escapeHtml(l.name)}</small></div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span class="mono" style="font-size:12px;color:var(--text-muted);">${remaining}/${cap} left</span>
+          <span class="mono" style="font-size:12px;color:var(--text-muted);">${remaining}/${leadershipActivityCap(role)} left</span>
           <button class="small-ghost" ${remaining<=0?'style="opacity:.4;pointer-events:none;"':''} onclick="openLeadershipActivityPicker('${role}')">Log Activity</button>
         </div>
       </div>`;
@@ -1747,8 +1923,8 @@ function goodsAdjust(g, delta){
   state.goods[g] = addWithCap(state.goods[g], delta, goodStorageCap(g));
   scheduleSave(); render();
 }
-// Work Site commodity collection now happens inside the guided Upkeep wizard
-// (openTurnUpkeepWizard, step 4) alongside Ruin/Resource-Dice/Consumption, matching
+// Work Site commodity collection now happens inside the guided Kingdom Turn wizard's
+// Upkeep phase (openKingdomTurnWizard) alongside Ruin/Resource-Dice/Consumption, matching
 // the real Upkeep Phase order instead of standing alone. See collectWorkSiteYields().
 function ruinAdjust(name, delta){
   const r = state.ruin[name];
@@ -1888,47 +2064,39 @@ function addLogEntry(){
 function removeLogEntry(i){ state.log.splice(i,1); scheduleSave(); render(); }
 
 /* =====================================================================
-   TURN UPKEEP WIZARD — guided walkthrough of the Upkeep Phase only
-   (2e.aonprd.com/Rules.aspx?ID=1795); Commerce/Activity/Event phases are
-   separate future work. Doesn't replace the manual turn stepper — this is
-   the primary way to advance a turn, alongside it. Progress is persisted
-   in state.turnUpkeep so closing partway through and resuming later (or
-   skipping a step whose roll hasn't happened at the table yet) both work.
+   KINGDOM TURN WIZARD — guided walkthrough of all four real Kingdom turn
+   phases: Upkeep (Rules.aspx?ID=1795), Commerce (ID=1800), Activity
+   (ID=1805), Event (ID=1809). Doesn't replace the manual turn stepper —
+   this is the primary way to advance a turn, alongside it. Every step
+   navigates to the exact spot it needs (Leaders tab, a specific hex, a
+   settlement) rather than just describing what to do, and progress is
+   persisted in state.turnWizard so closing partway through — even to go
+   do something on another tab — and resuming later both work.
 ===================================================================== */
-const UPKEEP_STEPS = ['fame','ruin','resourceDice','workSites','consumption'];
-function openTurnUpkeepWizard(){
-  if(!state.turnUpkeep) state.turnUpkeep = {step:0, fame:null, ruin:null, resourceDice:null, workSites:null, consumption:null};
-  renderTurnUpkeepWizard();
+const WIZARD_PHASES = ['upkeep','commerce','activity','event'];
+const UPKEEP_STEPS = ['fame','leadership','unrest','ruin','resourceDice','workSites','consumption'];
+function openKingdomTurnWizard(){
+  if(!state.turnWizard){
+    state.turnWizard = {
+      phase:'upkeep',
+      upkeep:{step:0, fame:null, leadership:null, unrest:null, ruin:null, resourceDice:null, workSites:null, consumption:null},
+      commerce:{},
+      activity:{regionLog:[], civicUsed:{}},
+      event:{}
+    };
+    state.rpSpentThisTurn = 0;
+  }
+  renderKingdomTurnWizard();
 }
-function closeTurnUpkeepWizard(){
+function closeKingdomTurnWizard(){
   const el = document.getElementById('upkeep-overlay');
   if(el) el.remove();
   scheduleSave();
   render();
 }
-function upkeepGoToStep(n){
-  state.turnUpkeep.step = Math.max(0, Math.min(4, n));
-  scheduleSave();
-  renderTurnUpkeepWizard();
-}
-function upkeepSkipStep(){
-  const key = UPKEEP_STEPS[state.turnUpkeep.step];
-  state.turnUpkeep[key] = {skipped:true};
-  if(state.turnUpkeep.step>=4) finishTurnUpkeep();
-  else upkeepGoToStep(state.turnUpkeep.step+1);
-}
-function upkeepNav(canSkip){
-  const u = state.turnUpkeep;
-  return `<div class="creation-nav" style="margin-top:14px;flex-wrap:wrap;gap:8px;">
-    <button class="ghost" style="flex:0 0 100%;" onclick="closeTurnUpkeepWizard()">Close for now (resume later)</button>
-    ${u.step>0 ? `<button class="ghost" onclick="upkeepGoToStep(${u.step-1})">Back</button>` : ''}
-    ${canSkip ? `<button class="ghost" onclick="upkeepSkipStep()">Skip for now</button>` : ''}
-    ${u.step<4 ? `<button class="action" onclick="upkeepGoToStep(${u.step+1})">Next</button>` : `<button class="action" onclick="finishTurnUpkeep()">Finish &amp; log turn</button>`}
-  </div>`;
-}
-function renderTurnUpkeepWizard(){
-  const u = state.turnUpkeep;
-  if(!u) return;
+function renderKingdomTurnWizard(){
+  const tw = state.turnWizard;
+  if(!tw) return;
   let overlay = document.getElementById('upkeep-overlay');
   if(!overlay){
     overlay = document.createElement('div');
@@ -1936,38 +2104,169 @@ function renderTurnUpkeepWizard(){
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
     document.body.appendChild(overlay);
   }
+  const phaseIdx = WIZARD_PHASES.indexOf(tw.phase);
+  const phaseLabels = {upkeep:'Upkeep', commerce:'Commerce', activity:'Activity', event:'Event'};
+  const body = tw.phase==='upkeep' ? renderUpkeepPhaseBody()
+    : tw.phase==='commerce' ? renderCommercePhaseBody()
+    : tw.phase==='activity' ? renderActivityPhaseBody()
+    : renderEventPhaseBody();
+  overlay.innerHTML = `<div class="card" style="max-width:460px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
+    <div class="hint" style="margin-top:0;">Turn ${state.turn} — Phase ${phaseIdx+1} of 4: ${phaseLabels[tw.phase]}${inAnarchy()?' <span style="color:var(--rust);">· ANARCHY (Unrest 20+, only Quell Unrest; checks worsened one degree)</span>':''}</div>
+    ${body}
+  </div>`;
+}
+function wizardCloseButton(){
+  return `<button class="ghost" style="flex:0 0 100%;" onclick="closeKingdomTurnWizard()">Close for now (resume later)</button>`;
+}
+
+/* =====================================================================
+   PHASE 1: UPKEEP (2e.aonprd.com/Rules.aspx?ID=1795)
+===================================================================== */
+function renderUpkeepPhaseBody(){
+  const u = state.turnWizard.upkeep;
   const stepKey = UPKEEP_STEPS[u.step];
-  const renderers = {fame:renderUpkeepFameStep, ruin:renderUpkeepRuinStep, resourceDice:renderUpkeepResourceDiceStep, workSites:renderUpkeepWorkSitesStep, consumption:renderUpkeepConsumptionStep};
-  overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
-    <div class="hint" style="margin-top:0;">Turn ${state.turn} Upkeep — step ${u.step+1} of 5</div>
-    ${renderers[stepKey]()}
+  const renderers = {
+    fame:renderUpkeepFameStep, leadership:renderUpkeepLeadershipStep, unrest:renderUpkeepUnrestStep,
+    ruin:renderUpkeepRuinStep, resourceDice:renderUpkeepResourceDiceStep, workSites:renderUpkeepWorkSitesStep,
+    consumption:renderUpkeepConsumptionStep
+  };
+  return `<div class="hint" style="margin:0 0 8px;">Upkeep step ${u.step+1} of ${UPKEEP_STEPS.length}</div>${renderers[stepKey]()}`;
+}
+function upkeepGoToStep(n){
+  state.turnWizard.upkeep.step = Math.max(0, Math.min(UPKEEP_STEPS.length-1, n));
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+function upkeepSkipStep(){
+  const u = state.turnWizard.upkeep;
+  const key = UPKEEP_STEPS[u.step];
+  u[key] = {skipped:true};
+  if(u.step>=UPKEEP_STEPS.length-1) advanceToCommercePhase();
+  else upkeepGoToStep(u.step+1);
+}
+function upkeepNav(canSkip){
+  const u = state.turnWizard.upkeep;
+  const last = u.step>=UPKEEP_STEPS.length-1;
+  return `<div class="creation-nav" style="margin-top:14px;flex-wrap:wrap;gap:8px;">
+    ${wizardCloseButton()}
+    ${u.step>0 ? `<button class="ghost" onclick="upkeepGoToStep(${u.step-1})">Back</button>` : ''}
+    ${canSkip ? `<button class="ghost" onclick="upkeepSkipStep()">Skip for now</button>` : ''}
+    ${!last ? `<button class="action" onclick="upkeepGoToStep(${u.step+1})">Next</button>` : `<button class="action" onclick="advanceToCommercePhase()">Continue to Commerce Phase &rarr;</button>`}
   </div>`;
 }
 
-/* ---- step 1: Fame/Infamy ---- */
+/* ---- step: Fame/Infamy — gained automatically at the start of each Kingdom turn
+   (2e.aonprd.com/Rules.aspx?ID=1793); unspent Fame/Infamy is lost at the end of the turn. ---- */
 function renderUpkeepFameStep(){
-  const u = state.turnUpkeep;
+  const u = state.turnWizard.upkeep;
   if(u.fame){
-    return `<h3>1. ${state.fameType}</h3><div class="hint" style="margin-top:0;">Applied: +${u.fame.amount} ${state.fameType} (now ${state.fame}).</div>${upkeepNav(false)}`;
+    return `<h3>${state.fameType}</h3><div class="hint" style="margin-top:0;">Applied: +${u.fame.amount} ${state.fameType} (now ${state.fame}).</div>${upkeepNav(false)}`;
   }
-  return `<h3>1. ${state.fameType}</h3>
-    <div class="hint" style="margin-top:0;">Automatic: your kingdom gains +1 ${state.fameType}, capped at ${state.fameMax}.</div>
+  return `<h3>${state.fameType}</h3>
+    <div class="hint" style="margin-top:0;">Automatic: your kingdom gains +1 ${state.fameType}, capped at ${state.fameMax}. Unspent ${state.fameType} is lost at the end of the turn.</div>
     <button class="action" onclick="applyUpkeepFame()">Apply +1 ${state.fameType}</button>
     ${upkeepNav(true)}`;
 }
 function applyUpkeepFame(){
   state.fame = Math.min(state.fameMax, state.fame+1);
-  state.turnUpkeep.fame = {applied:true, amount:1};
+  state.turnWizard.upkeep.fame = {applied:true, amount:1};
   scheduleSave();
-  renderTurnUpkeepWizard();
+  renderKingdomTurnWizard();
 }
 
-/* ---- step 2: Ruin — only triggers at Unrest 10+: 1d10 distributed among the four
+/* ---- step: Step 1, Assign Leadership Roles (Rules.aspx?ID=1796) — reassign freely via
+   New Leadership, then resolve downtime: a named leader who didn't spend the required
+   downtime must either forfeit one Leadership activity this turn or take the vacancy
+   penalty until the start of next turn (vacancy re-evaluates fresh here each turn). ---- */
+function renderUpkeepLeadershipStep(){
+  const u = state.turnWizard.upkeep;
+  if(u.leadership && u.leadership.done){
+    const l = u.leadership;
+    const parts = [];
+    if(l.forfeit.length) parts.push(`forfeited an activity: ${l.forfeit.join(', ')}`);
+    if(l.vacancy.length) parts.push(`took the vacancy penalty: ${l.vacancy.join(', ')}`);
+    return `<h3>1. Assign Leadership Roles</h3><div class="hint" style="margin-top:0;">${parts.length?parts.join('; '):'All active leaders had their downtime covered.'}</div>${upkeepNav(false)}`;
+  }
+  if(!u.leadership) u.leadership = {downtime:{}, resolved:{}, forfeit:[], vacancy:[], initialized:false};
+  const l = u.leadership;
+  const activeRoles = ROLES.filter(([r])=>state.leaders[r].name).map(([r])=>r);
+  if(!l.initialized){
+    activeRoles.forEach(r=>{ state.leaders[r].vacant = false; });
+    l.initialized = true;
+  }
+  const unresolved = activeRoles.filter(r=>!l.downtime[r] && !l.resolved[r]);
+  return `<h3>1. Assign Leadership Roles</h3>
+    <div class="hint" style="margin-top:0;">Reassign or swap anyone via New Leadership on the Leaders tab now if you want to, then confirm who spent their required downtime since last turn.</div>
+    <button class="ghost" style="margin:6px 0 10px;" onclick="closeKingdomTurnWizard();switchTab('leaders');">Go to Leaders tab</button>
+    ${activeRoles.length ? activeRoles.map(r=>{
+      const resolved = l.resolved[r];
+      return `<div class="row">
+        <div class="label">${r}<small>${escapeHtml(state.leaders[r].name)}</small></div>
+        ${resolved ? `<span class="pill">${resolved==='forfeit'?'forfeits an activity':(resolved==='vacancy'?'vacancy penalty':'downtime OK')}</span>` :
+          `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);">
+            <input type="checkbox" ${l.downtime[r]?'checked':''} onchange="upkeepSetDowntime('${r}',this.checked)"> spent downtime
+          </label>`}
+      </div>
+      ${(!resolved && !l.downtime[r]) ? `<div style="display:flex;gap:6px;margin:2px 0 8px;">
+        <button class="small-ghost" onclick="upkeepResolveDowntime('${r}','forfeit')">Forfeit an activity instead</button>
+        <button class="small-ghost" onclick="upkeepResolveDowntime('${r}','vacancy')">Take vacancy penalty</button>
+      </div>` : ''}`;
+    }).join('') : `<div class="hint" style="margin-top:0;">No leaders assigned yet.</div>`}
+    ${unresolved.length ? `<div class="hint" style="color:var(--rust);">${unresolved.length} role${unresolved.length>1?'s':''} still need${unresolved.length>1?'':'s'} downtime confirmed, or a choice made, before continuing.</div>` : `<button class="action" onclick="finishUpkeepLeadershipStep()">Confirm &amp; continue</button>`}
+    ${upkeepNav(false)}`;
+}
+function upkeepSetDowntime(role, checked){
+  const l = state.turnWizard.upkeep.leadership;
+  l.downtime[role] = checked;
+  delete l.resolved[role];
+  renderKingdomTurnWizard();
+}
+function upkeepResolveDowntime(role, choice){
+  const l = state.turnWizard.upkeep.leadership;
+  l.resolved[role] = choice;
+  if(choice==='forfeit'){ if(!l.forfeit.includes(role)) l.forfeit.push(role); }
+  else { if(!l.vacancy.includes(role)) l.vacancy.push(role); state.leaders[role].vacant = true; }
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+function finishUpkeepLeadershipStep(){
+  state.turnWizard.upkeep.leadership.done = true;
+  scheduleSave();
+  upkeepGoToStep(state.turnWizard.upkeep.step+1);
+}
+
+/* ---- step: Step 2, Adjust Unrest (Rules.aspx?ID=1797) — +1 per Overcrowded settlement,
+   +1 if at war, before the Ruin-at-10+ check in the next step. ---- */
+function renderUpkeepUnrestStep(){
+  const u = state.turnWizard.upkeep;
+  if(u.unrest){
+    return `<h3>2. Adjust Unrest${infoIcon('Unrest')}</h3><div class="hint" style="margin-top:0;">${u.unrest.skipped ? 'Skipped for now.' : `+${u.unrest.added} Unrest applied (${u.unrest.overcrowded} Overcrowded settlement${u.unrest.overcrowded===1?'':'s'}${u.unrest.atWar?', at war':''}). Unrest is now ${state.unrest}.`}</div>${upkeepNav(false)}`;
+  }
+  const overcrowded = overcrowdedSettlements();
+  const sum = overcrowded.length + (state.atWar?1:0);
+  return `<h3>2. Adjust Unrest${infoIcon('Unrest')}</h3>
+    <div class="hint" style="margin-top:0;">Overcrowded settlement${infoIcon('Overcrowded')}s: ${overcrowded.length ? overcrowded.map(s=>escapeHtml(s.name)).join(', ') : 'none'} (+${overcrowded.length}).</div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:8px 0;">
+      <input type="checkbox" ${state.atWar?'checked':''} onchange="state.atWar=this.checked;scheduleSave();render();"> Kingdom is at war${infoIcon('At War')} (+1 Unrest)
+    </label>
+    <button class="action" onclick="applyUpkeepUnrest(${overcrowded.length},${state.atWar})">Apply +${sum} Unrest</button>
+    ${upkeepNav(true)}`;
+}
+function applyUpkeepUnrest(overcrowded, atWar){
+  const added = overcrowded + (atWar?1:0);
+  state.unrest += added;
+  state.turnWizard.upkeep.unrest = {applied:true, overcrowded, atWar, added};
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+
+/* ---- step: Ruin — only triggers at Unrest 10+: 1d10 distributed among the four
    Ruins, then a DC 11 flat check; failure loses a hex (GM/player choice which one,
-   resolved on the Map tab — not auto-selected here). ---- */
+   resolved on the Map tab — not auto-selected here). Unrest 20+ is Anarchy, surfaced
+   as a banner across the whole wizard rather than a separate step. ---- */
 let upkeepRuinPending = null;
 function renderUpkeepRuinStep(){
-  const u = state.turnUpkeep;
+  const u = state.turnWizard.upkeep;
   if(u.ruin){
     let detail;
     if(u.ruin.skipped) detail = 'Skipped for now.';
@@ -1976,24 +2275,24 @@ function renderUpkeepRuinStep(){
       const dist = Object.entries(u.ruin.distributed).filter(([,v])=>v).map(([k,v])=>`${k} +${v}`).join(', ')||'none';
       detail = `Gained ${u.ruin.rolled} Ruin (${dist}). DC 11 flat check rolled ${u.ruin.checkRoll} — ${u.ruin.hexLost?'failed, a hex was lost (remove it on the Map tab)':'succeeded'}.`;
     }
-    return `<h3>2. Ruin</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
+    return `<h3>3. Ruin (from Unrest 10+)</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
   }
   if(state.unrest<10){
-    return `<h3>2. Ruin</h3>
+    return `<h3>3. Ruin (from Unrest 10+)</h3>
       <div class="hint" style="margin-top:0;">Not triggered this turn — Ruin only accumulates when Unrest is 10 or higher (currently ${state.unrest}).</div>
       <button class="action" onclick="applyUpkeepRuinNotTriggered()">Continue</button>
       ${upkeepNav(false)}`;
   }
-  return `<h3>2. Ruin</h3>
+  return `<h3>3. Ruin (from Unrest 10+)</h3>
     <div class="hint" style="margin-top:0;">Unrest is ${state.unrest} (10+) — the kingdom gains 1d10 Ruin. Roll it and enter the result:</div>
     <input class="num" type="number" id="upkeep-ruin-roll" min="1" max="10" placeholder="1d10 result">
     <button class="action" style="margin-top:8px;" onclick="upkeepRuinRolled()">Confirm roll</button>
     ${upkeepNav(true)}`;
 }
 function applyUpkeepRuinNotTriggered(){
-  state.turnUpkeep.ruin = {applied:true, triggered:false};
+  state.turnWizard.upkeep.ruin = {applied:true, triggered:false};
   scheduleSave();
-  renderTurnUpkeepWizard();
+  renderKingdomTurnWizard();
 }
 function upkeepRuinRolled(){
   const v = parseInt(document.getElementById('upkeep-ruin-roll').value,10);
@@ -2001,8 +2300,8 @@ function upkeepRuinRolled(){
   upkeepRuinPending = {rolled:v};
   const overlay = document.getElementById('upkeep-overlay');
   overlay.querySelector('.card').innerHTML = `
-    <div class="hint" style="margin-top:0;">Turn ${state.turn} Upkeep — step 2 of 5</div>
-    <h3>2. Ruin — distribute ${v} point${v>1?'s':''}</h3>
+    <div class="hint" style="margin-top:0;">Turn ${state.turn} — Ruin</div>
+    <h3>Ruin — distribute ${v} point${v>1?'s':''}</h3>
     <div class="hint" style="margin-top:0;">Split the ${v} points however you like among the four Ruins.</div>
     ${['Corruption','Crime','Decay','Strife'].map(r=>`
       <div class="row">
@@ -2027,8 +2326,8 @@ function confirmUpkeepRuinDistribution(){
   upkeepRuinPending.distributed = distributed;
   const overlay = document.getElementById('upkeep-overlay');
   overlay.querySelector('.card').innerHTML = `
-    <div class="hint" style="margin-top:0;">Turn ${state.turn} Upkeep — step 2 of 5</div>
-    <h3>2. Ruin — DC 11 flat check</h3>
+    <div class="hint" style="margin-top:0;">Turn ${state.turn} — Ruin</div>
+    <h3>Ruin — DC 11 flat check</h3>
     <div class="hint" style="margin-top:0;">Roll a flat check (d20, no modifiers) against DC 11. Failure loses one hex.</div>
     <input class="num" type="number" id="upkeep-ruin-check" min="1" max="20" placeholder="d20 result">
     <button class="action" style="margin-top:8px;" onclick="confirmUpkeepRuinCheck()">Confirm roll</button>`;
@@ -2037,24 +2336,28 @@ function confirmUpkeepRuinCheck(){
   const roll = parseInt(document.getElementById('upkeep-ruin-check').value,10);
   if(!roll || roll<1 || roll>20){ alert('Enter the d20 result (1-20).'); return; }
   const hexLost = roll<11;
-  state.turnUpkeep.ruin = {applied:true, triggered:true, rolled:upkeepRuinPending.rolled, distributed:upkeepRuinPending.distributed, checkRoll:roll, hexLost};
+  state.turnWizard.upkeep.ruin = {applied:true, triggered:true, rolled:upkeepRuinPending.rolled, distributed:upkeepRuinPending.distributed, checkRoll:roll, hexLost};
   upkeepRuinPending = null;
   scheduleSave();
   if(hexLost) alert('The flat check failed — the kingdom loses one hex. Choose which one and remove it from the Map tab.');
-  upkeepGoToStep(state.turnUpkeep.step+1);
+  upkeepGoToStep(state.turnWizard.upkeep.step+1);
 }
 
-/* ---- step 3: Resource Dice -> RP (a real roll the app only used to label before) ---- */
+/* ---- step: Step 3, Resource Collection part 1 — Resource Dice -> RP
+   (Rules.aspx?ID=1798). Any bonus Resource Dice/RP earned via Commerce activities last
+   turn are folded in here and cleared. ---- */
 function renderUpkeepResourceDiceStep(){
-  const u = state.turnUpkeep;
+  const u = state.turnWizard.upkeep;
   if(u.resourceDice){
-    const detail = u.resourceDice.skipped ? 'Skipped for now.' : `Rolled ${u.resourceDice.rolled} — added to RP (now ${state.rp}).`;
-    return `<h3>3. Resource Dice</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
+    const detail = u.resourceDice.skipped ? 'Skipped for now.' : `Rolled ${u.resourceDice.rolled}${u.resourceDice.bonusRP?` +${u.resourceDice.bonusRP} bonus RP`:''} — added to RP (now ${state.rp}).`;
+    return `<h3>4a. Resource Dice</h3><div class="hint" style="margin-top:0;">${detail}</div>${upkeepNav(false)}`;
   }
   const sz = sizeRow(state.size);
-  const diceCount = state.level + 4 + featResourceDieBonus();
-  return `<h3>3. Resource Dice</h3>
-    <div class="hint" style="margin-top:0;">Roll ${sz.die}×${diceCount} and enter the total — it's added to your RP balance (currently ${state.rp}).</div>
+  const bonusDice = state.pendingBonusResourceDice||0;
+  const bonusRP = state.pendingBonusRP||0;
+  const diceCount = state.level + 4 + featResourceDieBonus() + bonusDice;
+  return `<h3>4a. Resource Dice</h3>
+    <div class="hint" style="margin-top:0;">Roll ${sz.die}×${diceCount}${bonusDice?` (includes +${bonusDice} bonus dice from last turn's Commerce activities)`:''} and enter the total — it's added to your RP balance (currently ${state.rp})${bonusRP?`, plus ${bonusRP} bonus RP from Manage Trade Agreements`:''}.</div>
     <input class="num" type="number" min="0" id="upkeep-rd-roll" placeholder="Rolled total">
     <button class="action" style="margin-top:8px;" onclick="confirmUpkeepResourceDice()">Add to RP</button>
     ${upkeepNav(true)}`;
@@ -2062,48 +2365,60 @@ function renderUpkeepResourceDiceStep(){
 function confirmUpkeepResourceDice(){
   const v = parseInt(document.getElementById('upkeep-rd-roll').value,10);
   if(isNaN(v) || v<0){ alert('Enter the rolled total.'); return; }
-  state.rp += v;
-  state.turnUpkeep.resourceDice = {applied:true, rolled:v};
+  const bonusRP = state.pendingBonusRP||0;
+  state.rp += v + bonusRP;
+  state.turnWizard.upkeep.resourceDice = {applied:true, rolled:v, bonusRP};
+  state.pendingBonusResourceDice = 0;
+  state.pendingBonusRP = 0;
   scheduleSave();
-  renderTurnUpkeepWizard();
+  renderKingdomTurnWizard();
 }
 
-/* ---- step 4: Work Site commodities — flat and automatic, not a roll ---- */
+/* ---- step: Step 3, Resource Collection part 2 — Work Site commodities, flat and
+   automatic, not a roll. Attributed per hex, same tagging style as ability boosts. ---- */
 function collectWorkSiteYields(){
   const gains = {};
-  Object.values(state.hexes).forEach(h=>{
+  const tags = [];
+  Object.entries(state.hexes).forEach(([key,h])=>{
     if(!h || !h.workSite) return;
     const def = HEX_WORK_SITES[h.workSite];
     if(!def || !def.good) return;
     const yieldAmt = h.resourceFlag ? 2 : 1;
     const before = state.goods[def.good];
     state.goods[def.good] = addWithCap(before, yieldAmt, goodStorageCap(def.good));
-    gains[def.good] = (gains[def.good]||0) + (state.goods[def.good]-before);
+    const got = state.goods[def.good]-before;
+    gains[def.good] = (gains[def.good]||0) + got;
+    if(got>0){ const [col,row] = key.split('_').map(Number); tags.push({label:`${h.workSite} (${hexLabel(col,row)})`, good:def.good, amt:got}); }
   });
-  return gains;
+  return {gains, tags};
 }
 function renderUpkeepWorkSitesStep(){
-  const u = state.turnUpkeep;
+  const u = state.turnWizard.upkeep;
   if(u.workSites){
-    if(u.workSites.skipped) return `<h3>4. Work Site commodities</h3><div class="hint" style="margin-top:0;">Skipped for now.</div>${upkeepNav(false)}`;
-    const parts = Object.keys(u.workSites.summary).filter(k=>u.workSites.summary[k]>0).map(k=>`+${u.workSites.summary[k]} ${k}`);
-    return `<h3>4. Work Site commodities</h3><div class="hint" style="margin-top:0;">${parts.length?parts.join(', '):'No Work Sites produced anything (check storage caps and hex assignments).'}</div>${upkeepNav(false)}`;
+    if(u.workSites.skipped) return `<h3>4b. Work Site commodities</h3><div class="hint" style="margin-top:0;">Skipped for now.</div>${upkeepNav(false)}`;
+    const tags = u.workSites.tags||[];
+    return `<h3>4b. Work Site commodities</h3>
+      ${tags.length ? `<div class="ability-tags">${tags.map(t=>`<span class="ability-tag pos">${escapeHtml(t.label)} +${t.amt} ${t.good}</span>`).join('')}</div>` : `<div class="hint" style="margin-top:0;">No Work Sites produced anything (check storage caps and hex assignments).</div>`}
+      ${upkeepNav(false)}`;
   }
   const activeCount = Object.values(state.hexes).filter(h=>h&&h.workSite).length;
-  return `<h3>4. Work Site commodities</h3>
+  return `<h3>4b. Work Site commodities</h3>
     <div class="hint" style="margin-top:0;">Automatic — ${activeCount} active Work Site${activeCount===1?'':'s'}, each adding 1 commodity (2 if flagged as a Resource hex), capped at storage.</div>
     <button class="action" onclick="applyUpkeepWorkSites()">Collect</button>
     ${upkeepNav(true)}`;
 }
 function applyUpkeepWorkSites(){
-  state.turnUpkeep.workSites = {applied:true, summary:collectWorkSiteYields()};
+  const {gains, tags} = collectWorkSiteYields();
+  state.turnWizard.upkeep.workSites = {applied:true, summary:gains, tags};
   scheduleSave();
-  renderTurnUpkeepWizard();
+  renderKingdomTurnWizard();
 }
 
-/* ---- step 5: Consumption — paid from Food; shortfall costs 5 RP/point or +1d4 Unrest ---- */
+/* ---- step: Step 4, Pay Consumption (Rules.aspx?ID=1799) — settlement + army
+   Consumption, minus storage-bonus structures and in-influence Farmland hexes; paid from
+   Food, shortfall costs 5 RP/point or +1d4 Unrest (one roll for the whole shortfall). ---- */
 function renderUpkeepConsumptionStep(){
-  const u = state.turnUpkeep;
+  const u = state.turnWizard.upkeep;
   if(u.consumption){
     if(u.consumption.skipped) return `<h3>5. Consumption${infoIcon('Consumption')}</h3><div class="hint" style="margin-top:0;">Skipped for now.</div>${upkeepNav(false)}`;
     const c = u.consumption;
@@ -2114,14 +2429,15 @@ function renderUpkeepConsumptionStep(){
   const owed = effectiveConsumptionOwed();
   const available = state.goods.Food;
   const shortfall = Math.max(0, owed-available);
+  const breakdown = `${settlementConsumptionTotal()} settlements + ${armyConsumptionTotal()} armies − ${structureConsumptionBonus()} structures − ${hexConsumptionReduction()} in-range Farmland`;
   if(shortfall===0){
     return `<h3>5. Consumption${infoIcon('Consumption')}</h3>
-      <div class="hint" style="margin-top:0;">Owed ${owed} Food (base ${state.consumption}, reduced by storage-bonus structures and Farmland hexes). You have ${available} — fully covered.</div>
+      <div class="hint" style="margin-top:0;">Owed ${owed} Food (${breakdown}). You have ${available} — fully covered.</div>
       <button class="action" onclick="applyUpkeepConsumption(${owed},${owed},0,null,0)">Pay ${owed} Food</button>
       ${upkeepNav(true)}`;
   }
   return `<h3>5. Consumption${infoIcon('Consumption')}</h3>
-    <div class="hint" style="margin-top:0;">Owed ${owed} Food, you have ${available} — a shortfall of ${shortfall}. Per the rules, for the unpaid amount you either spend 5 RP per point or increase Unrest by 1d4 (not per point — one roll covers the whole shortfall).</div>
+    <div class="hint" style="margin-top:0;">Owed ${owed} Food (${breakdown}), you have ${available} — a shortfall of ${shortfall}. For the unpaid amount, either spend 5 RP per point or increase Unrest by 1d4 (one roll covers the whole shortfall).</div>
     <button class="ghost" ${state.rp<shortfall*5?'style="opacity:.45;pointer-events:none;"':''} onclick="chooseUpkeepConsumptionShortfall(${owed},${available},${shortfall})">Spend ${shortfall*5} RP (have ${state.rp})</button>
     <div class="hint" style="margin:10px 0 4px;">Or roll 1d4 and add it to Unrest:</div>
     <input class="num" type="number" min="1" max="4" id="upkeep-consumption-unrest-roll" placeholder="1d4 result">
@@ -2130,14 +2446,15 @@ function renderUpkeepConsumptionStep(){
 }
 function applyUpkeepConsumption(owed, paidFromFood, shortfall, choice, extra){
   state.goods.Food = Math.max(0, state.goods.Food - paidFromFood);
-  state.turnUpkeep.consumption = {applied:true, owed, paidFromFood, shortfall, choice, unrestGain:choice==='unrest'?extra:0};
+  state.turnWizard.upkeep.consumption = {applied:true, owed, paidFromFood, shortfall, choice, unrestGain:choice==='unrest'?extra:0};
   scheduleSave();
-  renderTurnUpkeepWizard();
+  renderKingdomTurnWizard();
 }
 function chooseUpkeepConsumptionShortfall(owed, available, shortfall){
   const cost = shortfall*5;
   if(state.rp<cost){ alert('Not enough RP.'); return; }
   state.rp -= cost;
+  state.rpSpentThisTurn = (state.rpSpentThisTurn||0) + cost;
   applyUpkeepConsumption(owed, available, shortfall, 'rp', 0);
 }
 function chooseUpkeepConsumptionShortfallUnrest(owed, available, shortfall){
@@ -2146,11 +2463,15 @@ function chooseUpkeepConsumptionShortfallUnrest(owed, available, shortfall){
   state.unrest += roll;
   applyUpkeepConsumption(owed, available, shortfall, 'unrest', roll);
 }
-
-function finishTurnUpkeep(){
-  const u = state.turnUpkeep;
+function advanceToCommercePhase(){
+  const u = state.turnWizard.upkeep;
   const lines = [];
   if(u.fame) lines.push(`${state.fameType} +${u.fame.amount}`);
+  if(u.leadership && u.leadership.done){
+    if(u.leadership.forfeit.length) lines.push(`forfeited activity: ${u.leadership.forfeit.join(', ')}`);
+    if(u.leadership.vacancy.length) lines.push(`vacancy penalty: ${u.leadership.vacancy.join(', ')}`);
+  }
+  if(u.unrest) lines.push(u.unrest.skipped ? 'Unrest: skipped' : `Unrest +${u.unrest.added}`);
   if(u.ruin){
     if(u.ruin.skipped) lines.push('Ruin: skipped');
     else if(u.ruin.triggered===false) lines.push('Ruin: not triggered');
@@ -2176,8 +2497,310 @@ function finishTurnUpkeep(){
     }
   }
   state.log.unshift({turn:state.turn, note:'Upkeep — '+(lines.join('; ')||'nothing processed')});
-  state.turnUpkeep = null;
-  closeTurnUpkeepWizard();
+  state.turnWizard.phase = 'commerce';
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+
+/* =====================================================================
+   PHASE 2: COMMERCE (2e.aonprd.com/Rules.aspx?ID=1800) — each activity may be attempted
+   once per Kingdom turn, independently of the others (not a shared pool).
+===================================================================== */
+function renderCommercePhaseBody(){
+  const c = state.turnWizard.commerce;
+  return `<div class="hint" style="margin:0 0 8px;">Attempt any of these once this turn. Resolve the check at the table, then log the result.</div>
+    ${Object.entries(COMMERCE_ACTIVITIES).map(([name,def])=>{
+      const done = c[name];
+      return `<div class="row" style="flex-direction:column;align-items:stretch;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="label">${name}<small>${def.skill}</small></div>
+          ${done ? `<span class="pill">${['Crit. Failure','Failure','Success','Crit. Success'][done.degree]}</span>` : `<button class="small-ghost" onclick="openCommerceActivity('${escapeAttr(name)}')">Resolve</button>`}
+        </div>
+        <div class="hint" style="margin:2px 0 0;">${done ? escapeHtml(done.text) : escapeHtml(def.note)}</div>
+      </div>`;
+    }).join('')}
+    <div class="row">
+      <div class="label">Trade Agreements<small>manual count — used by Manage Trade Agreements</small></div>
+      <div class="stepper">
+        <button onclick="state.tradeAgreements=Math.max(0,(state.tradeAgreements||0)-1);scheduleSave();renderKingdomTurnWizard();">−</button>
+        <div class="amt mono">${state.tradeAgreements||0}</div>
+        <button onclick="state.tradeAgreements=(state.tradeAgreements||0)+1;scheduleSave();renderKingdomTurnWizard();">+</button>
+      </div>
+    </div>
+    <div class="creation-nav" style="margin-top:14px;flex-wrap:wrap;gap:8px;">
+      ${wizardCloseButton()}
+      <button class="action" onclick="advanceToActivityPhase()">Continue to Activity Phase &rarr;</button>
+    </div>`;
+}
+function openCommerceActivity(name){
+  const def = COMMERCE_ACTIVITIES[name];
+  if(def.needsGoodPicker){
+    const overlay = document.createElement('div');
+    overlay.id = 'commerce-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:110;display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML = `<div class="card" style="max-width:340px;width:100%;margin:0;">
+      <h3>${escapeHtml(name)} — pick a Commodity</h3>
+      <div class="hint" style="margin-top:0;">Reduce its stockpile by up to 4 (as much as you have), then resolve the check.</div>
+      ${GOODS.filter(g=>state.goods[g]>0).map(g=>`<button type="button" class="option-card" onclick="document.getElementById('commerce-overlay').remove();openDegreePicker('${escapeAttr(name)}', d=>resolveCommerceActivity('${escapeAttr(name)}', d, '${g}'))">
+        <div class="opt-name">${g} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(have ${state.goods[g]})</span></div>
+      </button>`).join('') || '<div class="hint">No Commodities in stock to trade.</div>'}
+      <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('commerce-overlay').remove();">Cancel</button>
+    </div>`;
+    document.body.appendChild(overlay);
+    return;
+  }
+  openDegreePicker(name, d=>resolveCommerceActivity(name, d, null));
+}
+function resolveCommerceActivity(name, degree, goodChoice){
+  const def = COMMERCE_ACTIVITIES[name];
+  const text = def.outcomes[degree];
+  state.turnWizard.commerce[name] = {degree, text, goodChoice};
+  let mechNote = '';
+  if(name==='Trade Commodities' && goodChoice){
+    const spend = Math.min(4, state.goods[goodChoice]);
+    state.goods[goodChoice] = Math.max(0, state.goods[goodChoice]-spend);
+    if(degree===3){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0) + spend*2; mechNote = ` −${spend} ${goodChoice}, +${spend*2} bonus Resource Dice next turn.`; }
+    else if(degree===2){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0) + spend; mechNote = ` −${spend} ${goodChoice}, +${spend} bonus Resource Dice next turn.`; }
+    else if(degree===1){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0) + 1; mechNote = ` −${spend} ${goodChoice}, +1 bonus Resource Die next turn.`; }
+    else mechNote = ` −${spend} ${goodChoice}, no bonus.`;
+  }
+  if(name==='Manage Trade Agreements'){
+    const n = state.tradeAgreements||0;
+    if(degree===1){ state.pendingBonusRP = (state.pendingBonusRP||0) + n; mechNote = ` +${n} bonus RP next turn.`; }
+    else if(degree===3){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0) + n; mechNote = ` +${n} bonus Resource Dice next turn (add the ${n} chosen Commodities manually too).`; }
+    else if(degree===2){ state.pendingBonusResourceDice = (state.pendingBonusResourceDice||0) + n; mechNote = ` +${n} bonus Resource Dice next turn (or add ${n} Commodities manually instead).`; }
+  }
+  if((name==='Improve Lifestyle' || name==='Tap Treasury') && degree===0){
+    state.unrest += 1;
+    mechNote = ' +1 Unrest (pick a Ruin to raise +1 on the Abilities tab).';
+  }
+  if(name==='Collect Taxes'){
+    if(degree===2 && state.taxesCollectedLastTurn){ state.unrest += 1; mechNote = ' +1 Unrest (Collected Taxes last turn too).'; }
+    else if(degree===1){ const gain = state.taxesCollectedLastTurn ? 2 : 1; state.unrest += gain; mechNote = ` +${gain} Unrest.`; }
+    else if(degree===0){ state.unrest += 2; mechNote = ' +2 Unrest (pick a Ruin to raise +1 on the Abilities tab).'; }
+  }
+  state.log.unshift({turn:state.turn, note:`Commerce — ${name}: ${text}${mechNote}`});
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+function advanceToActivityPhase(){
+  state.taxesCollectedLastTurn = !!state.turnWizard.commerce['Collect Taxes'];
+  state.turnWizard.phase = 'activity';
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+
+/* =====================================================================
+   PHASE 3: ACTIVITY (2e.aonprd.com/Rules.aspx?ID=1805) — Leadership Activities (2-3 per
+   leader, tracked on the Leaders tab), up to 3 Region activities shared kingdom-wide, one
+   Civic activity per settlement, and Army Activities only while at war.
+===================================================================== */
+function renderActivityPhaseBody(){
+  const a = state.turnWizard.activity;
+  const investedRoles = ROLES.filter(([r])=>state.leaders[r].name && !state.leaders[r].vacant);
+  return `
+    <div class="card" style="margin:0 0 10px;padding:12px;">
+      <div class="card-head-row"><h3 style="margin-bottom:0;font-size:14px;">Leadership Activities</h3></div>
+      <div class="hint" style="margin-top:0;">${investedRoles.length} active leader${investedRoles.length===1?'':'s'} — log activities on the Leaders tab.</div>
+      <button class="ghost" onclick="closeKingdomTurnWizard();switchTab('leaders');">Go to Leaders tab</button>
+    </div>
+    <div class="card" style="margin:0 0 10px;padding:12px;">
+      <div class="card-head-row"><h3 style="margin-bottom:0;font-size:14px;">Region Activities</h3><span class="pill">${a.regionLog.length} / 3 used</span></div>
+      <div class="hint" style="margin-top:0;">Up to 3 shared kingdom-wide, on any hex(es).</div>
+      ${Object.keys(REGION_ACTIVITIES).map(name=>`<button class="small-ghost" style="margin:2px 4px 2px 0;${a.regionLog.length>=3?'opacity:.4;pointer-events:none;':''}" onclick="openRegionActivityPicker('${escapeAttr(name)}')">${name}</button>`).join('')}
+      ${a.regionLog.length ? `<div style="margin-top:8px;">${a.regionLog.map(r=>`<div class="hint" style="margin:2px 0;">${escapeHtml(r.name)} @ ${escapeHtml(r.hexLabel)}: ${escapeHtml(r.text)}</div>`).join('')}</div>` : ''}
+    </div>
+    <div class="card" style="margin:0 0 10px;padding:12px;">
+      <div class="card-head-row"><h3 style="margin-bottom:0;font-size:14px;">Civic Activities</h3><span class="pill">${Object.keys(a.civicUsed).length} / ${state.settlements.length} used</span></div>
+      <div class="hint" style="margin-top:0;">One per settlement — Build Structure, Demolish, etc. happen on the Notes tab's settlement grid.</div>
+      ${state.settlements.map(s=>`<div class="row">
+        <div class="label">${escapeHtml(s.name)}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);"><input type="checkbox" ${a.civicUsed[s.id]?'checked':''} onchange="toggleCivicUsed(${s.id},this.checked)"> used</label>
+          <button class="small-ghost" onclick="closeKingdomTurnWizard();switchTab('notes');">Open</button>
+        </div>
+      </div>`).join('') || `<div class="hint" style="margin-top:0;">No settlements founded yet.</div>`}
+    </div>
+    <div class="card" style="margin:0 0 10px;padding:12px;">
+      <div class="card-head-row"><h3 style="margin-bottom:0;font-size:14px;">Army Activities</h3></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:4px 0;">
+        <input type="checkbox" ${state.atWar?'checked':''} onchange="state.atWar=this.checked;scheduleSave();render();renderKingdomTurnWizard();"> Kingdom is at war
+      </label>
+      ${state.atWar ? `<button class="ghost" onclick="closeKingdomTurnWizard();switchTab('warfare');">Go to Warfare tab</button>` : `<div class="hint" style="margin-top:0;">Not at war — Army Activities are skipped this turn.</div>`}
+    </div>
+    <div class="creation-nav" style="margin-top:4px;flex-wrap:wrap;gap:8px;">
+      ${wizardCloseButton()}
+      <button class="action" onclick="advanceToEventPhase()">Continue to Event Phase &rarr;</button>
+    </div>`;
+}
+function toggleCivicUsed(sid, checked){
+  const a = state.turnWizard.activity;
+  if(checked) a.civicUsed[sid] = true; else delete a.civicUsed[sid];
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+let pendingRegionActivity = null;
+function openRegionActivityPicker(name){
+  if(state.turnWizard.activity.regionLog.length>=3) return;
+  pendingRegionActivity = name;
+  const def = REGION_ACTIVITIES[name];
+  const overlay = document.createElement('div');
+  overlay.id = 'region-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:110;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:360px;width:100%;margin:0;">
+    <h3>${escapeHtml(name)}</h3>
+    <div class="hint" style="margin-top:0;">${escapeHtml(def.note)} Skill: ${escapeHtml(def.skill)}.</div>
+    <div class="row"><div class="label">Target hex</div><input type="text" class="wide" id="region-hex-label" style="max-width:100px;" placeholder="e.g. F6"></div>
+    <div id="region-hex-detail" class="hint" style="margin-top:0;"></div>
+    <button class="action" style="margin-top:8px;" onclick="lookupRegionHex('${escapeAttr(name)}')">Look up this hex</button>
+    <button class="ghost" style="margin-top:8px;" onclick="pendingRegionActivity=null;document.getElementById('region-overlay').remove();">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function lookupRegionHex(name){
+  const label = document.getElementById('region-hex-label').value;
+  const parsed = parseHexLabel(label);
+  const detail = document.getElementById('region-hex-detail');
+  if(!parsed){ detail.textContent = "Couldn't read that hex label — try e.g. F6."; return; }
+  const {col,row} = parsed;
+  const h = state.hexes[hexKey(col,row)];
+  const def = REGION_ACTIVITIES[name];
+  if(!h || !h.terrain){
+    detail.innerHTML = `${hexLabel(col,row)} has no tracked terrain yet. <span class="loc-link" onclick="document.getElementById('region-overlay').remove();closeKingdomTurnWizard();jumpToHex(${col},${row});">Go set it on the Map</span>`;
+    return;
+  }
+  const rpCost = def.rpCost==='farmland'
+    ? (h.terrain==='Plains' ? 1 : h.terrain==='Hill' ? 2 : null)
+    : (WORK_SITE_TERRAIN_RP_COST[h.terrain] ?? null);
+  if(rpCost==null){
+    detail.textContent = `${h.terrain} isn't a valid terrain for ${name} at ${hexLabel(col,row)}.`;
+    return;
+  }
+  detail.innerHTML = `${hexLabel(col,row)} — ${h.terrain}. Costs ${rpCost} RP.${state.rp<rpCost?' Not enough RP.':''} <button class="action" style="margin-top:6px;" ${state.rp<rpCost?'disabled style="opacity:.45;"':''} onclick="resolveRegionActivityStart('${escapeAttr(name)}',${col},${row},${rpCost})">Pay ${rpCost} RP &amp; resolve</button>`;
+}
+function resolveRegionActivityStart(name, col, row, rpCost){
+  if(state.rp<rpCost) return;
+  state.rp -= rpCost;
+  state.rpSpentThisTurn = (state.rpSpentThisTurn||0) + rpCost;
+  const el = document.getElementById('region-overlay');
+  if(el) el.remove();
+  openDegreePicker(name, d=>resolveRegionActivity(name, col, row, rpCost, d));
+}
+function resolveRegionActivity(name, col, row, rpCost, degree){
+  const def = REGION_ACTIVITIES[name];
+  const text = def.outcomes[degree];
+  const key = hexKey(col,row);
+  let mechNote = '';
+  if(degree===3 && /refund half/i.test(text)){ state.rp += Math.floor(rpCost/2); mechNote = ` +${Math.floor(rpCost/2)} RP refunded.`; }
+  if(name==='Claim Hex' && degree>=2){
+    const h = state.hexes[key] || {name:'',note:'',resources:'',features:'',terrain:'',workSite:'',resourceFlag:false};
+    if(!CLAIMED_HEX_TYPES.includes(h.type)){ h.type = 'Claimed Territory'; state.hexes[key] = h; }
+    state.xp += 10; mechNote += ' +10 kingdom XP.';
+  }
+  if(name==='Establish Farmland' && degree>=2 && state.hexes[key]){ state.hexes[key].workSite = 'Farmland'; mechNote += ' Hex set to Farmland.'; }
+  if(name==='Fortify Hex'){ if(degree>=2) state.unrest = Math.max(0, state.unrest-1); if(degree===0) state.unrest += 1; }
+  if((name==='Clear Hex' || name==='Build Roads' || name==='Irrigation') && degree===0){ state.unrest += 1; }
+  state.turnWizard.activity.regionLog.push({name, hexLabel:hexLabel(col,row), degree, text:text+mechNote, rpCost});
+  state.log.unshift({turn:state.turn, note:`Region — ${name} at ${hexLabel(col,row)}: ${text}${mechNote}`});
+  pendingRegionActivity = null;
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+function advanceToEventPhase(){
+  state.turnWizard.phase = 'event';
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+
+/* =====================================================================
+   PHASE 4: EVENT (2e.aonprd.com/Rules.aspx?ID=1809) — DC 16 flat check for a random
+   event; a miss drops next turn's DC by 5 (floor 1), and a hit resets it to 16. Event
+   resolution grants a PC-leader circumstance bonus if a non-vacant PC holds the role
+   handling it (Rules.aspx?ID=1774: +1, or +2/+3 at kingdom level 9/15).
+===================================================================== */
+function pcLeaderEventBonus(role){
+  if(!role) return 0;
+  const l = state.leaders[role];
+  if(!l || !l.pcHeld || l.vacant) return 0;
+  return state.level>=15 ? 3 : state.level>=9 ? 2 : 1;
+}
+function renderEventPhaseBody(){
+  const e = state.turnWizard.event;
+  if(e.done){
+    return `<h3>Event</h3><div class="hint" style="margin-top:0;">${escapeHtml(e.summary)}</div>
+      <button class="action" style="margin-top:10px;" onclick="finishKingdomTurn()">Finish Turn</button>`;
+  }
+  if(e.checked===undefined || e.checked===null){
+    return `<h3>Event</h3>
+      <div class="hint" style="margin-top:0;">Attempt a DC ${state.eventDC} flat check. On a hit, a random kingdom event occurs this turn.</div>
+      <input class="num" type="number" id="event-dc-roll" min="1" max="20" placeholder="d20 result">
+      <button class="action" style="margin-top:8px;" onclick="rollEventCheck()">Confirm roll</button>
+      <div class="creation-nav" style="margin-top:14px;flex-wrap:wrap;gap:8px;">
+        ${wizardCloseButton()}
+        <button class="ghost" onclick="skipEventCheck()">No event to check right now</button>
+      </div>`;
+  }
+  if(!e.triggered){
+    return `<h3>Event</h3><div class="hint" style="margin-top:0;">Rolled ${e.checked} vs DC ${e.priorDC} — no event. Next turn's DC drops to ${state.eventDC}.</div>
+      <button class="action" style="margin-top:10px;" onclick="finishKingdomTurn()">Finish Turn</button>`;
+  }
+  return `<h3>Event triggered!</h3>
+    <div class="hint" style="margin-top:0;">Rolled ${e.checked} vs DC ${e.priorDC}. Resolve the event at the table (a starter event library isn't built into the app yet — use the Kingmaker Events list), then log which Kingdom skill and leader handled it and what happened.</div>
+    <div class="row"><div class="label">Kingdom skill</div><select id="event-skill" class="wide">${SKILLS.map(([n])=>`<option value="${n}">${n}</option>`).join('')}</select></div>
+    <div class="row"><div class="label">Handled by</div><select id="event-role" class="wide" onchange="updateEventBonusPreview()">${ROLES.map(([r])=>`<option value="${r}">${r}${state.leaders[r].name?' — '+escapeHtml(state.leaders[r].name):''}</option>`).join('')}</select></div>
+    <div class="hint" id="event-bonus-preview" style="margin-top:0;"></div>
+    <button class="action" style="margin-top:8px;" onclick="openEventResolutionPicker()">Resolve</button>`;
+}
+function rollEventCheck(){
+  const roll = parseInt(document.getElementById('event-dc-roll').value,10);
+  if(!roll || roll<1 || roll>20){ alert('Enter the d20 result (1-20).'); return; }
+  const priorDC = state.eventDC;
+  const triggered = roll>=priorDC;
+  state.eventDC = triggered ? 16 : Math.max(1, priorDC-5);
+  state.turnWizard.event = {checked:roll, priorDC, triggered};
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+function skipEventCheck(){
+  state.turnWizard.event = {done:true, summary:'Event check skipped for now.'};
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+function updateEventBonusPreview(){
+  const role = document.getElementById('event-role').value;
+  const bonus = pcLeaderEventBonus(role);
+  document.getElementById('event-bonus-preview').textContent = bonus ? `+${bonus} circumstance bonus — ${state.leaders[role].name} (${role}) is a PC-held, non-vacant leader.` : 'No PC-leader bonus for this role right now.';
+}
+function openEventResolutionPicker(){
+  const role = document.getElementById('event-role').value;
+  const skill = document.getElementById('event-skill').value;
+  openDegreePicker(`Event — ${skill} (${role})`, d=>resolveEvent(skill, role, d));
+}
+function resolveEvent(skill, role, degree){
+  const bonus = pcLeaderEventBonus(role);
+  state.xp += 30;
+  const labels = ['Critical Failure','Failure','Success','Critical Success'];
+  const summary = `Random event resolved with ${skill} (${role}${bonus?`, +${bonus} PC-leader bonus`:''}) — ${labels[degree]}. +30 kingdom XP.`;
+  state.turnWizard.event = {done:true, summary};
+  state.log.unshift({turn:state.turn, note:`Event — ${summary}`});
+  scheduleSave();
+  renderKingdomTurnWizard();
+}
+function finishKingdomTurn(){
+  state.fame = 0;
+  const rpXp = Math.min(120, state.rp);
+  if(rpXp>0){ state.xp += rpXp; state.rp -= rpXp; }
+  let milestoneNote = '';
+  if(!state.milestoneRP100Claimed && (state.rpSpentThisTurn||0)>=100){
+    state.xp += 80;
+    state.milestoneRP100Claimed = true;
+    milestoneNote = ' Milestone: first turn spending 100+ RP, +80 kingdom XP.';
+  }
+  state.log.unshift({turn:state.turn, note:`Turn complete — ${rpXp>0?`${rpXp} unspent RP converted to XP.`:'no unspent RP to convert.'}${milestoneNote}`});
+  state.turn += 1;
+  state.rpSpentThisTurn = 0;
+  state.turnWizard = null;
+  closeKingdomTurnWizard();
 }
 
 /* ---------- SETTLEMENTS ---------- */
@@ -2252,9 +2875,10 @@ function renderLotPickerResults(){
   if(q) options = options.filter(st=>st.name.toLowerCase().includes(q));
   document.getElementById('lot-picker-hint').textContent = `This block has ${emptyCount} open lot${emptyCount===1?'':'s'}. RP balance: ${state.rp}.`;
   document.getElementById('lot-picker-results').innerHTML = options.length ? options.map(st=>{
-    const problem = affordabilityMessage(st.cost);
+    const pending = (s.pendingBuilds||[]).some(p=>p.gridNum===gridNum && p.blockIdx===blockIdx && p.structureName===st.name);
+    const problem = pending ? null : affordabilityMessage(st.cost);
     return `<button type="button" class="option-card" ${problem?'style="opacity:.45;pointer-events:none;"':''} onclick="placeStructureInLot(${sid},${gridNum},${blockIdx},'${escapeAttr(st.name)}')">
-      <div class="opt-name">${escapeHtml(st.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${st.lots} lot${st.lots>1?'s':''} · ${formatCost(st.cost)})</span></div>
+      <div class="opt-name">${escapeHtml(st.name)} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">(${st.lots} lot${st.lots>1?'s':''} · ${pending?'already paid — retry the check':formatCost(st.cost)})</span></div>
       <div class="opt-detail">${escapeHtml(st.effect)}${problem?` — <span style="color:var(--rust);">${escapeHtml(problem)}</span>`:''}</div>
     </button>`;
   }).join('') : `<div class="hint" style="margin-top:0;">Nothing matches — try a different filter, or check lot space, kingdom level, and proficiency.</div>`;
@@ -2315,32 +2939,69 @@ function showCommodityShortageHelp(cost, problemText){
   document.body.appendChild(overlay);
 }
 function spendResources(cost){
-  state.rp = Math.max(0, state.rp - (cost.rp||0));
+  const rpCost = cost.rp||0;
+  state.rp = Math.max(0, state.rp - rpCost);
+  if(rpCost) state.rpSpentThisTurn = (state.rpSpentThisTurn||0) + rpCost;
   GOODS.forEach(g=>{ const k=g.toLowerCase(); const need=cost[k]||0; if(need) state.goods[g] = Math.max(0, state.goods[g]-need); });
 }
 let pendingStructurePlacement = null; // {sid,gridNum,blockIdx,structureName,emptyIdxs} while a Tenement-style ruin choice is open
+// Build Structure (2e.aonprd.com/Actions.aspx?ID=1372, Civic trait) — real 4-tier outcome:
+// critical success = build + refund half the commodities; success = build; failure = no
+// build, but costs already spent carry forward (no re-pay on a later attempt, tracked via
+// s.pendingBuilds); critical failure = no build, and the lots fill with Rubble (per AoN's
+// own text this applies "in either event," i.e. fresh construction too, not just repairs —
+// Rubble must be cleared with Demolish before the lots are usable again).
 function placeStructureInLot(sid, gridNum, blockIdx, structureName){
   const s = state.settlements.find(x=>x.id===sid);
   if(!s) return;
   const st = KM_STRUCTURES.find(x=>x.name===structureName);
-  if(!st || st.lots==null) return;
+  if(!st || st.lots==null || !st.construction) return;
   const block = lotsForGrid(s, gridNum)[blockIdx];
   const emptyIdxs = block.map((v,i)=>v?-1:i).filter(i=>i!==-1);
   if(emptyIdxs.length < st.lots) return;
-  const problem = affordabilityMessage(st.cost);
-  if(problem){ shortCommodities(st.cost).length ? showCommodityShortageHelp(st.cost, problem) : alert(problem); return; }
-  if(st.ruin && /of your choice/i.test(st.ruin)){
-    pendingStructurePlacement = {sid, gridNum, blockIdx, structureName, emptyIdxs};
-    openRuinChoicePopup();
-    return;
+  s.pendingBuilds = s.pendingBuilds||[];
+  const pending = s.pendingBuilds.find(p=>p.gridNum===gridNum && p.blockIdx===blockIdx && p.structureName===structureName);
+  if(!pending){
+    const problem = affordabilityMessage(st.cost);
+    if(problem){ shortCommodities(st.cost).length ? showCommodityShortageHelp(st.cost, problem) : alert(problem); return; }
+    spendResources(st.cost);
   }
-  finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, null);
+  closeLotOverlay();
+  openDegreePicker(`Build Structure — ${structureName}`, d=>resolveBuildStructure(sid, gridNum, blockIdx, structureName, d));
 }
-function finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, ruinChoice){
+function resolveBuildStructure(sid, gridNum, blockIdx, structureName, degree){
   const s = state.settlements.find(x=>x.id===sid);
   const st = KM_STRUCTURES.find(x=>x.name===structureName);
   if(!s || !st) return;
-  spendResources(st.cost);
+  s.pendingBuilds = (s.pendingBuilds||[]).filter(p=>!(p.gridNum===gridNum && p.blockIdx===blockIdx && p.structureName===structureName));
+  const block = lotsForGrid(s, gridNum)[blockIdx];
+  const emptyIdxs = block.map((v,i)=>v?-1:i).filter(i=>i!==-1);
+  if(degree>=2){
+    if(emptyIdxs.length < st.lots){ alert('Not enough open lots left to complete this build — it was crowded out in the meantime. Costs already spent are not refunded.'); scheduleSave(); render(); return; }
+    if(st.ruin && /of your choice/i.test(st.ruin)){
+      pendingStructurePlacement = {sid, gridNum, blockIdx, structureName, emptyIdxs, critRefund: degree===3};
+      openRuinChoicePopup();
+      return;
+    }
+    finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, null, degree===3);
+  } else if(degree===1){
+    s.pendingBuilds.push({gridNum, blockIdx, structureName});
+    state.log.unshift({turn:state.turn, note:`Structures — ${structureName} construction failed in ${s.name}; costs already spent carry forward to the next attempt.`});
+    scheduleSave(); renderNotesTab(); render();
+  } else {
+    for(let i=0;i<st.lots && i<emptyIdxs.length;i++) block[emptyIdxs[i]] = {name:'Rubble', g:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+'_'+i};
+    state.log.unshift({turn:state.turn, note:`Structures — ${structureName} construction critically failed in ${s.name}. The lots are now Rubble — clear them with Demolish before building here again.`});
+    scheduleSave(); renderNotesTab(); render();
+  }
+}
+function finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, ruinChoice, critRefund){
+  const s = state.settlements.find(x=>x.id===sid);
+  const st = KM_STRUCTURES.find(x=>x.name===structureName);
+  if(!s || !st) return;
+  if(critRefund){
+    if(st.cost.rp) state.rp += Math.floor(st.cost.rp/2);
+    GOODS.forEach(g=>{ const k=g.toLowerCase(); const amt=st.cost[k]||0; if(amt) state.goods[g] = addWithCap(state.goods[g], Math.floor(amt/2), goodStorageCap(g)); });
+  }
   const block = lotsForGrid(s, gridNum)[blockIdx];
   const g = 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   for(let i=0;i<st.lots;i++){
@@ -2348,9 +3009,11 @@ function finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, 
     if(ruinChoice) slot.ruinChoice = ruinChoice;
     block[emptyIdxs[i]] = slot;
   }
+  state.log.unshift({turn:state.turn, note:`Structures — built ${structureName} in ${s.name}${critRefund?' (critical success — half commodities refunded)':''}.`});
   closeLotOverlay();
   scheduleSave();
   renderNotesTab();
+  render();
 }
 function openRuinChoicePopup(){
   const overlay = document.createElement('div');
@@ -2368,9 +3031,66 @@ function openRuinChoicePopup(){
 }
 function chooseRuinForPendingStructure(ruinName){
   if(!pendingStructurePlacement) return;
-  const {sid, gridNum, blockIdx, structureName, emptyIdxs} = pendingStructurePlacement;
+  const {sid, gridNum, blockIdx, structureName, emptyIdxs, critRefund} = pendingStructurePlacement;
   pendingStructurePlacement = null;
-  finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, ruinName);
+  finishPlaceStructure(sid, gridNum, blockIdx, structureName, emptyIdxs, ruinName, critRefund);
+}
+// Demolish (2e.aonprd.com/Actions.aspx?ID=1391, Civic trait) — clears an occupied lot
+// (in practice, almost always a Rubble lot left by a critically-failed build) back to
+// buildable. AoN gives no distinct critical-failure text, so critical failure here is
+// treated the same as a plain failure (still Rubble) rather than guessed at.
+function demolishLot(sid, gridNum, blockIdx, groupId){
+  closeLotOverlay();
+  openDegreePicker('Demolish', d=>resolveDemolish(sid, gridNum, blockIdx, groupId, d));
+}
+function clearRubbleGroup(s, gridNum, blockIdx, groupId){
+  lotsForGrid(s, gridNum)[blockIdx].forEach((v,i,arr)=>{ if(v && v.g===groupId) arr[i]=null; });
+}
+function resolveDemolish(sid, gridNum, blockIdx, groupId, degree){
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  if(degree===3){ openDemolishCritRewardPicker(sid, gridNum, blockIdx, groupId); return; }
+  if(degree===2){
+    clearRubbleGroup(s, gridNum, blockIdx, groupId);
+    state.log.unshift({turn:state.turn, note:`Structures — demolished a Rubble lot in ${s.name}.`});
+  } else {
+    state.log.unshift({turn:state.turn, note:`Structures — Demolish failed in ${s.name}; the lot remains Rubble.`});
+  }
+  scheduleSave(); renderNotesTab(); render();
+}
+let pendingDemolishCrit = null;
+function openDemolishCritRewardPicker(sid, gridNum, blockIdx, groupId){
+  pendingDemolishCrit = {sid, gridNum, blockIdx, groupId};
+  const overlay = document.createElement('div');
+  overlay.id = 'lot-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="card" style="max-width:340px;width:100%;margin:0;">
+    <h3>Critical Success — recover materials</h3>
+    <div class="hint" style="margin-top:0;">Roll 1d6 and pick which Commodity your crews salvaged from the rubble.</div>
+    <input class="num" type="number" min="1" max="6" id="demolish-crit-roll" placeholder="1d6 result">
+    <div class="boost-picker" style="margin-top:10px;">
+      ${['Lumber','Stone','Ore'].map(g=>`<button type="button" onclick="confirmDemolishCritReward('${g}')">${g}</button>`).join('')}
+    </div>
+    <button class="ghost" style="margin-top:10px;" onclick="pendingDemolishCrit=null;closeLotOverlay();">Skip reward</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function confirmDemolishCritReward(good){
+  if(!pendingDemolishCrit) return;
+  const roll = parseInt(document.getElementById('demolish-crit-roll').value,10);
+  const {sid, gridNum, blockIdx, groupId} = pendingDemolishCrit;
+  pendingDemolishCrit = null;
+  const s = state.settlements.find(x=>x.id===sid);
+  if(!s) return;
+  let note = `Structures — demolished a Rubble lot in ${s.name} (critical success).`;
+  if(roll && roll>=1 && roll<=6){
+    state.goods[good] = addWithCap(state.goods[good], roll, goodStorageCap(good));
+    note += ` Recovered ${roll} ${good}.`;
+  }
+  clearRubbleGroup(s, gridNum, blockIdx, groupId);
+  state.log.unshift({turn:state.turn, note});
+  closeLotOverlay();
+  scheduleSave(); renderNotesTab(); render();
 }
 function openLotInfoPopup(sid, gridNum, blockIdx, groupId){
   const s = state.settlements.find(x=>x.id===sid);
@@ -2383,12 +3103,14 @@ function openLotInfoPopup(sid, gridNum, blockIdx, groupId){
   const emptyCount = block.filter(v=>!v).length;
   const upgradeOptions = ((def && def.upgradeTo) || [])
     .map(n=>KM_STRUCTURES.find(x=>x.name===n)).filter(u=>u && u.level<=state.level && structureRankMet(u));
+  const isRubble = slot.name==='Rubble';
   const overlay = document.createElement('div');
   overlay.id = 'lot-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:85vh;overflow-y:auto;margin:0;">
     <h3>${escapeHtml(slot.name)}</h3>
     ${def ? `<div class="hint" style="margin-top:0;">${escapeHtml(def.effect)}</div>` : ''}
+    ${isRubble ? `<button type="button" class="action" style="margin-top:10px;" onclick="demolishLot(${sid},${gridNum},${blockIdx},'${groupId}')">Demolish (clear this lot)</button>` : ''}
     ${upgradeOptions.length ? `
       <div class="hint" style="margin:10px 0 4px;">Upgrade to:</div>
       ${upgradeOptions.map(u=>{
@@ -2401,7 +3123,7 @@ function openLotInfoPopup(sid, gridNum, blockIdx, groupId){
           <div class="opt-detail">${escapeHtml(u.effect)}${!roomFits?' — not enough open lots in this block':(problem?' — '+escapeHtml(problem):'')}</div>
         </button>`;
       }).join('')}` : ''}
-    <button class="ghost danger-ghost" style="margin-top:10px;" onclick="removeStructureGroup(${sid},${gridNum},'${groupId}');closeLotOverlay();">Remove <span style="opacity:.7;">(RP/commodities already spent aren't refunded)</span></button>
+    <button class="ghost danger-ghost" style="margin-top:10px;" onclick="removeStructureGroup(${sid},${gridNum},'${groupId}');closeLotOverlay();">Remove <span style="opacity:.7;">(instant, no check — RP/commodities already spent aren't refunded)</span></button>
     <button class="ghost" style="margin-top:8px;" onclick="closeLotOverlay()">Close</button>
   </div>`;
   document.body.appendChild(overlay);
@@ -3324,6 +4046,7 @@ function saveHex(){
       return;
     }
     state.rp -= cost;
+    if(cost) state.rpSpentThisTurn = (state.rpSpentThisTurn||0) + cost;
   }
   if(!name && !type && !note && !resources && !features && !terrain && !workSite && !resourceFlag){
     delete state.hexes[activeHexKey];
