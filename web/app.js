@@ -458,9 +458,27 @@ async function downloadAndInstallLatestApk(){
 const STORY_NPCS = [
   'Kesten Garess','Jhod Kavken','Jubilost Narthropple','Tristian','Harrim','Valerie',
   'Amiri','Regongar','Octavia','Linzi','Ekundayo','Nok-Nok','Shandra Mvashti',
-  'Oleg Leveton','Svetlana Leveton'
+  'Oleg Leveton','Svetlana Leveton','Jaethal','Kalikke','Kanerah'
 ];
-const STORY_NPC_BONUS = {};
+// Companion role suitability + auto-invest (2e.aonprd.com/Rules.aspx?ID=1774, "Leadership
+// Roles" — AoN-confirmed, high confidence): a companion from the Kingmaker Companion Guide
+// who holds the Leadership role(s) listed in their book entry has that role automatically
+// invested, IN ADDITION TO the 4 roles the players choose — it doesn't consume one of the 4
+// (see isCompanionAutoInvested/toggleInvest). Being invested grants the standard scaling
+// status bonus to that role's key-ability Kingdom checks (+1 at level 1-7, +2 at 8-15, +3 at
+// 16+ — investedStatusBonusTier()), same as any other invested role.
+// The role-per-companion assignments themselves are NOT AoN-primary-sourced (the book's
+// actual per-companion entries live in narrative chapters AoN doesn't reproduce) — compiled
+// from a well-regarded third-party rules reference (rpgbot.net) and only partially cross-
+// checked (its claim that Amiri/Warden unlocks a "Gladiatorial Arena" structure matches
+// AoN's own structures list for this book). Treat as reasonably reliable, not certain.
+const STORY_NPC_SUITED_ROLES = {
+  'Amiri': ['Warden'], 'Ekundayo': ['General','Warden'], 'Jubilost Narthropple': ['Treasurer'],
+  'Linzi': ['Counselor'], 'Nok-Nok': ['Emissary'], 'Tristian': ['Magister'], 'Valerie': ['General'],
+  'Harrim': ['Magister'], 'Jaethal': ['Emissary'], 'Kalikke': ['Counselor'], 'Kanerah': ['Emissary'],
+  'Octavia': ['Magister'], 'Regongar': ['General']
+};
+const STORY_NPC_BONUS = Object.fromEntries(Object.entries(STORY_NPC_SUITED_ROLES).map(([n,roles])=>[n, 'auto-invests as '+roles.join(' or ')]));
 // Personality/background write-ups below are paraphrased from scratch in our own
 // words — not lifted from Paizo's published prose — same split KM_STRUCTURES and
 // KINGDOM_FEATS already follow, just applied to creative/flavor text instead of
@@ -468,15 +486,17 @@ const STORY_NPC_BONUS = {};
 // a character is described is Paizo's original writing, so every sentence here is
 // written fresh, not reworded from a source passage.
 //
-// `status` is only set to 'Primary Companion' for the 7 names AoN's own Companions
-// page (2e.aonprd.com/Rules.aspx?ID=1880) explicitly confirms: Amiri, Ekundayo,
-// Jubilost, Linzi, Nok-Nok, Tristian, Valerie. That page also confirms exactly 5
-// "secondary companions" exist, limited to downtime/kingdom-management roles — but
-// does not name them, and their names are gated behind spoiler-hidden entries on
-// AoN's Kingmaker Companion Guide sources index that couldn't be reached from here.
-// Kesten Garess and Jhod Kavken are plausible candidates (both tied to specific
-// Leadership roles across other sources) but that's not the same as confirmed, so
-// none of the other 8 roster names are labeled a companion tier either way.
+// `status` is 'Primary Companion' for the 7 names AoN's own Companions page
+// (2e.aonprd.com/Rules.aspx?ID=1880) explicitly confirms: Amiri, Ekundayo, Jubilost,
+// Linzi, Nok-Nok, Tristian, Valerie. That page also confirms exactly 5 "secondary
+// companions" exist (limited to downtime/kingdom-management roles) without naming them —
+// resolved via the Kingmaker Companion Guide's own product listing (six names: Harrim,
+// Jaethal, Kalikke, Kanerah, Octavia, Regongar) plus a third-party contents index,
+// reconciling to 5 companion *slots* because Kalikke/Kanerah share one interchangeable
+// slot. Their biographical facts below come from the CRPG's wiki (tabletop-confirmed to
+// exist, but the book's own prose is paywalled and wasn't the source for these facts —
+// paraphrased independently either way, not copied from the wiki's wording).
+// Kesten Garess and Jhod Kavken remain unconfirmed as any companion tier.
 const STORY_NPC_INFO = {
   'Amiri': {status:'Primary Companion', deity:'Gorum', description:"A hard-traveling barbarian carrying an oversized greatsword from her homeland. She grew up in a northern tribe that had little patience for a woman built for battle, and channels that old resentment into a blunt, unapologetic love of a good fight. Loyalty, once earned, runs deep with her."},
   'Ekundayo': {status:'Primary Companion', deity:'Torag', description:"A quiet, grim-faced ranger who lost his wife and daughter to a troll raid and has never fully set the grief down. He tracks with methodical patience and keeps a loyal hound at his side, but rarely lets anyone get close enough to see past the armor he's built around himself."},
@@ -487,12 +507,15 @@ const STORY_NPC_INFO = {
   'Valerie': {status:'Primary Companion', deity:null, description:"A disciplined fighter who left a strict, regimented order behind her and rarely explains why. Dutiful almost to a fault, she holds herself and everyone around her to a high standard, and keeps her own history at arm's length."},
   'Kesten Garess': {status:null, deity:null, description:"A fighter from a noble Brevic house who was disowned for falling in love with a woman his family considered beneath him. He served as a guard captain before that, and carries himself with the discipline of that training and the quiet weight of what it cost him."},
   'Jhod Kavken': {status:null, deity:'Erastil', description:"An earnest, soft-spoken priest searching for a long-lost temple of his god somewhere in the Stolen Lands. Devout without being preachy, he's the kind of cleric who'd rather tend a garden or mend a fence than argue theology."},
-  'Harrim': {status:null, deity:'Groetus', description:"A dwarf cleric who tried, and failed, again and again, to honor his people's god of craft — every project he touched fell apart. Worn down by the streak of bad luck, he found a grim sort of comfort in a god of endings instead, and now delivers doom-laden pronouncements with the flat calm of someone who's made peace with pessimism."},
-  'Regongar': {status:null, deity:null, description:"A half-orc spellcaster who fights as fiercely with a blade as with magic, forged by years as a slave to a ruthless technological cult. Volatile and blunt, he has little patience for cowardice or hesitation, and holds few things sacred besides the freedom he fought hard to win."},
-  'Octavia': {status:null, deity:null, description:"A half-elf trained in both arcane spellcraft and quiet, practical thievery, sold into slavery as a child alongside Regongar. Despite everything, she's kept a light, optimistic streak — freedom clearly means everything to her, even if she rarely says so directly."},
+  'Harrim': {status:'Secondary Companion', deity:'Groetus', description:"A dwarf cleric who tried, and failed, again and again, to honor his people's god of craft — every project he touched fell apart. Worn down by the streak of bad luck, he found a grim sort of comfort in a god of endings instead, and now delivers doom-laden pronouncements with the flat calm of someone who's made peace with pessimism."},
+  'Regongar': {status:'Secondary Companion', deity:null, description:"A half-orc spellcaster who fights as fiercely with a blade as with magic, forged by years as a slave to a ruthless technological cult. Volatile and blunt, he has little patience for cowardice or hesitation, and holds few things sacred besides the freedom he fought hard to win."},
+  'Octavia': {status:'Secondary Companion', deity:'Calistria', description:"A half-elf trained in both arcane spellcraft and quiet, practical thievery, sold into slavery as a child alongside Regongar. Despite everything, she's kept a light, optimistic streak — freedom clearly means everything to her, even if she rarely says so directly."},
   'Shandra Mvashti': {status:null, deity:null, description:"A settler with a personal, long-standing claim to a homestead somewhere in the Stolen Lands. Practical and determined, she's less interested in glory than in seeing that claim honored."},
   'Oleg Leveton': {status:null, deity:null, description:"A gruff former city-dweller who traded noise and politics for a quiet trading post on the frontier. Prefers being master of his own small patch of land to answering to anyone else, but treats travelers who pass through fairly."},
-  'Svetlana Leveton': {status:null, deity:null, description:"Oleg's wife and partner in running their trading post — warm, even-tempered, and the more approachable of the two. Minor nobility by birth, she never took to court intrigue and found she preferred an honest, hands-on life instead."}
+  'Svetlana Leveton': {status:null, deity:null, description:"Oleg's wife and partner in running their trading post — warm, even-tempered, and the more approachable of the two. Minor nobility by birth, she never took to court intrigue and found she preferred an honest, hands-on life instead."},
+  'Jaethal': {status:'Secondary Companion', deity:'Urgathoa', description:"An undead elf inquisitor sworn to Urgathoa, exiled from Kyonin generations ago after taking part in the ritual killing of her own family. Death didn't end her service — she rose again in the goddess's name — but Urgathoa has since gone quiet, leaving Jaethal's purpose oddly adrift. Cold and clinical even by undead standards, she keeps a living daughter alive less out of love than a refusal to waste the effort already spent."},
+  'Kalikke': {status:'Secondary Companion', deity:null, description:"A tiefling kineticist who fled Qadira under a false name, staying quiet about whatever drove her out. Good-hearted and easier to get along with than her twin, she's bound to Kanerah by a shared curse that lets only one of them walk the world at a time — the other waits somewhere just out of reach."},
+  'Kanerah': {status:'Secondary Companion', deity:null, description:"A tiefling kineticist and Kalikke's twin, sharing the same flight from Qadira under the same false name — and the same curse that ties their fates together, swapping one for the other. Where Kalikke leans warm, Kanerah is cold and self-serving, and the two sisters make no secret of how little they trust each other."}
 };
 let expandedNPCs = new Set(); // transient UI state — which roster cards are open
 function toggleNPCCard(name){
@@ -515,6 +538,7 @@ function renderNPCRoster(){
         </button>
         ${expanded ? `<div class="npc-entry-body">
           ${info.deity?`<div class="hint" style="margin-top:0;"><b style="color:var(--text);">Deity:</b> ${escapeHtml(info.deity)}</div>`:''}
+          ${STORY_NPC_SUITED_ROLES[name]?`<div class="hint" style="margin-top:2px;"><b style="color:var(--text);">Suited role:</b> ${STORY_NPC_SUITED_ROLES[name].join(' or ')} — auto-invests for free if placed there.</div>`:''}
           <div class="hint" style="margin-top:4px;">${escapeHtml(info.description||'No description recorded yet.')}</div>
         </div>` : ''}
       </div>`;
@@ -1753,7 +1777,7 @@ function renderOverview(){
               <td>${role}</td>
               <td style="color:var(--text-muted);">${ab}</td>
               <td>${l.vacant||!l.name ? '<span style="color:var(--rust);font-style:italic;">Vacant</span>' : (l.pcHeld?'★ ':'')+escapeHtml(l.name)}</td>
-              <td>${l.invested?'<span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">yes</span>':'—'}</td>
+              <td>${l.invested?'<span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">yes</span>':isCompanionAutoInvested(role)?'<span class="pill" title="Suited companion — free, in addition to your 4 chosen roles" style="color:var(--gold);border-color:var(--gold-dim);">⚑ auto</span>':'—'}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -1895,10 +1919,11 @@ function renderAbilities(){
           const s = state.skills[name];
           const profBonus = RANK_BONUS(s.rank, state.level);
           const featBonus = featSkillBonus(name);
-          const total = mod(score) + profBonus + featBonus + (s.status||0) - effPenalty - Math.abs(Math.min(0,unrestPenalty(state.unrest)));
+          const investedBonus = abilityInvestedBonus(a);
+          const total = mod(score) + profBonus + featBonus + investedBonus - effPenalty - Math.abs(Math.min(0,unrestPenalty(state.unrest)));
           const trainedBy = skillTrainedSource(name);
           return `<div class="row">
-            <div class="label">${name}${trainedBy?`<span class="skill-source-icon" title="Trained via ${escapeAttr(trainedBy)}">‡</span>`:''}${featBonus?`<span class="skill-source-icon" title="Feat bonus">✦</span>`:''}<small>${RANK_LABEL[s.rank]}</small></div>
+            <div class="label">${name}${trainedBy?`<span class="skill-source-icon" title="Trained via ${escapeAttr(trainedBy)}">‡</span>`:''}${featBonus?`<span class="skill-source-icon" title="Feat bonus">✦</span>`:''}${investedBonus?`<span class="skill-source-icon" title="Invested-role status bonus (+${investedBonus})">⚑</span>`:''}<small>${RANK_LABEL[s.rank]}</small></div>
             <div style="display:flex;gap:6px;align-items:center;">
               <select class="rank" onchange="state.skills['${name}'].rank=this.value;scheduleSave();render();">
                 ${Object.keys(RANK_LABEL).map(k=>`<option value="${k}" ${s.rank===k?'selected':''}>${RANK_LABEL[k]}</option>`).join('')}
@@ -1926,7 +1951,7 @@ function renderLeaders(){
     const showCustomInput = customNameRoles.has(role) || (l.name && !isPreset && !l.pcHeld);
     return `<div class="row" style="flex-direction:column;align-items:stretch;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div class="label">${role}${infoIcon(role)}${l.pcHeld?' <span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">★ PC-held</span>':''}<small>key ability: ${ab}</small></div>
+        <div class="label">${role}${infoIcon(role)}${l.pcHeld?' <span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">★ PC-held</span>':''}${isCompanionAutoInvested(role)?' <span class="pill" title="Suited companion — invested for free, in addition to your 4 chosen roles" style="color:var(--gold);border-color:var(--gold-dim);">⚑ Auto-invested</span>':''}<small>key ability: ${ab}</small></div>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);">
           <input type="checkbox" ${l.invested?'checked':''} onchange="toggleInvest('${role}',this.checked)"> invested
         </label>
@@ -1989,6 +2014,25 @@ function toggleInvest(role, checked){
   if(checked && investedCount>=4){ render(); return; }
   state.leaders[role].invested = checked;
   scheduleSave(); render();
+}
+// Companion auto-invest (2e.aonprd.com/Rules.aspx?ID=1774) — see the STORY_NPC_SUITED_ROLES
+// comment above for sourcing. A suited companion holding their role is invested "in
+// addition to" the 4 player-chosen roles, so it's checked separately here rather than
+// folded into the .invested flag/4-cap above.
+function isCompanionAutoInvested(role){
+  const l = state.leaders[role];
+  if(!l.name || l.vacant) return false;
+  return (STORY_NPC_SUITED_ROLES[l.name]||[]).includes(role);
+}
+function isRoleEffectivelyInvested(role){
+  return state.leaders[role].invested || isCompanionAutoInvested(role);
+}
+// The standard scaling status bonus every invested role's key ability gets, per AoN.
+function investedStatusBonusTier(){
+  return state.level>=16 ? 3 : state.level>=8 ? 2 : 1;
+}
+function abilityInvestedBonus(ability){
+  return ROLES.some(([r,ab])=>ab===ability && isRoleEffectivelyInvested(r)) ? investedStatusBonusTier() : 0;
 }
 
 /* ---------- LEADERSHIP ACTIVITIES — reference + logging, not dice-rolling: the app
