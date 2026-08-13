@@ -2866,9 +2866,9 @@ function renderUpkeepUnrestStep(){
   const overcrowded = overcrowdedSettlements();
   const sum = overcrowded.length + (state.atWar?1:0);
   return `<h3>2. Adjust Unrest${infoIcon('Unrest')}</h3>
-    <div class="hint" style="margin-top:0;">Overcrowded settlement${infoIcon('Overcrowded')}s: ${overcrowded.length ? overcrowded.map(s=>escapeHtml(s.name)).join(', ') : 'none'} (+${overcrowded.length}).</div>
+    <div class="hint" style="margin-top:0;">Overcrowded settlements${infoIcon('Overcrowded')}: ${overcrowded.length ? overcrowded.map(s=>escapeHtml(s.name)).join(', ') : 'none'} (+${overcrowded.length}).</div>
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:8px 0;">
-      <input type="checkbox" ${state.atWar?'checked':''} onchange="state.atWar=this.checked;scheduleSave();render();"> Kingdom is at war${infoIcon('At War')} (+1 Unrest)
+      <input type="checkbox" ${state.atWar?'checked':''} onchange="state.atWar=this.checked;scheduleSave();render();renderKingdomTurnWizard();"> Kingdom is at war${infoIcon('At War')} (+1 Unrest)
     </label>
     <button class="action" onclick="applyUpkeepUnrest(${overcrowded.length},${state.atWar})">Apply +${sum} Unrest</button>
     ${upkeepNav(true)}`;
