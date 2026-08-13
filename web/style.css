@@ -58,7 +58,7 @@
     padding:14px 10px;text-align:center;position:relative;overflow:hidden;
   }
   .seal::before{
-    content:'';position:absolute;inset:0;
+    content:'';position:absolute;inset:0;pointer-events:none;
     background:radial-gradient(circle at 50% -10%, rgba(201,162,75,0.16), transparent 60%);
   }
   .seal .val{font-family:'Cinzel',serif;font-size:26px;font-weight:700;color:var(--gold);position:relative;}
