@@ -1963,6 +1963,13 @@ function renderLeaders(){
           ${STORY_NPCS.map(n=>`<option value="${escapeAttr(n)}" ${l.name===n && !l.pcHeld?'selected':''}>${escapeHtml(n)}${STORY_NPC_BONUS[n]?' · '+escapeHtml(STORY_NPC_BONUS[n]):''}</option>`).join('')}
           <option value="__custom__" ${showCustomInput?'selected':''}>Custom…</option>
         </select>
+        ${(isPreset && !l.pcHeld && STORY_NPC_INFO[l.name]) ? (()=>{
+          const info = STORY_NPC_INFO[l.name];
+          return `<div class="hint" style="margin:0;padding:6px 8px;background:var(--surface-raised);border-radius:6px;">
+            <b style="color:var(--text);">${escapeHtml(l.name)}</b>${info.status?` <span class="pill" style="font-size:10px;margin-left:2px;">${escapeHtml(info.status)}</span>`:''}${info.deity?` — ${escapeHtml(info.deity)}`:''}
+            <div style="margin-top:3px;">${escapeHtml(info.description||'')}</div>
+          </div>`;
+        })() : ''}
         ${showCustomInput ? `<input class="wide" type="text" placeholder="Custom name" value="${escapeAttr(isPreset?'':l.name)}" onchange="state.leaders['${role}'].name=this.value;scheduleSave();render();">` : ''}
         <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--rust);white-space:nowrap;">
           <input type="checkbox" ${l.vacant?'checked':''} onchange="state.leaders['${role}'].vacant=this.checked;scheduleSave();render();"> vacant
