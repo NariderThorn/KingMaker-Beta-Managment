@@ -517,6 +517,27 @@ const STORY_NPC_INFO = {
   'Kalikke': {status:'Secondary Companion', deity:null, description:"A tiefling kineticist who fled Qadira under a false name, staying quiet about whatever drove her out. Good-hearted and easier to get along with than her twin, she's bound to Kanerah by a shared curse that lets only one of them walk the world at a time — the other waits somewhere just out of reach."},
   'Kanerah': {status:'Secondary Companion', deity:null, description:"A tiefling kineticist and Kalikke's twin, sharing the same flight from Qadira under the same false name — and the same curse that ties their fates together, swapping one for the other. Where Kalikke leans warm, Kanerah is cold and self-serving, and the two sisters make no secret of how little they trust each other."}
 };
+// Reference-only picker data for the "which group/nation?" fields on Send Diplomatic
+// Envoy, Pledge of Fealty, Request Foreign Aid, and Establish Trade Agreement — purely
+// flavor, no mechanical effect. Real Golarion nations from the Kingmaker region (Brevoy
+// and the River Kingdoms bordering the Stolen Lands, plus Numeria), verified against
+// Archives of Nethys and Pathfinder wiki sources. Descriptions below are paraphrased
+// fresh in our own words from bare facts (ruler, government type, a notable trait) —
+// not reworded from any source passage, same split the NPC bios above already follow.
+const KM_NATIONS = [
+  {name:'Brevoy', description:"A young hereditary monarchy to the north, formed three centuries ago when Choral the Conqueror unified two older realms. Its ruling line vanished without a trace decades later, and House Surtova has held an uneasy throne from New Stetven ever since — it's Brevoy's charter that let the Stolen Lands be settled at all."},
+  {name:'Rostland', description:"The southern half of Brevoy, once its own realm ruled by the sword-dueling Aldori swordlords. The city of Restov still governs itself by that old council of duelists, chafing against the crown up north."},
+  {name:'Issia', description:"The northern half of Brevoy — harsher land, thinner soil, held for a thousand years by House Surtova. They built their power on raiding and shrewd marriages long before they ever wore a crown."},
+  {name:'Daggermark', description:"A River Kingdoms city that runs on guild power more than on its nominal ruler, who keeps his seat only because the assassins' guild, the poisoners' guild, and the city's own warlord all back him. Hosts the region's one yearly attempt at cooperation, the Outlaw Council."},
+  {name:'Pitax', description:"A kingdom won at a card table — its king cheated his own brothers out of the throne. Known for a lavish annual tournament and a royal arts academy that draws more flattery than real talent."},
+  {name:'Mivon', description:"Settled generations ago by Aldori swordlords fleeing Rostland, where the way to rule is still to win the seat in single combat. Splinters into rival dueling houses more often than it unites behind one leader."},
+  {name:'Gralton', description:"Run by a small council of lifetime members who appoint their own public-facing governor — the real power stays a step behind whoever's actually waving from the balcony."},
+  {name:'Lambreth', description:"Seized in a single bloody night by an exiled foreign knight, who “helped” the old ruling council fend off an invasion and then killed the one member who wouldn't honor the deal afterward."},
+  {name:'Tymon', description:"Founded by a company of gladiators under four laws their leader declared unbreakable. Still ruled by whoever currently holds the title of Champion."},
+  {name:'Sevenarches', description:"Guarded by a secretive druidic order watching over an ancient rift to the fey realm — who controversially bar elves from the very site their own legends are tied to."},
+  {name:'Protectorate of the Black Marquis', description:"A stretch of river run like a toll racket by a self-styled pirate lord. Pay at the bridge, or expect to get boarded."},
+  {name:'Numeria', description:"Ruled by a former tribal warlord whose capital is built around the wreck of something not of this world. Once controlled by a cabal of scavenger-mages who exploited that wreckage's strange effects on him, he's since turned on them."}
+];
 let expandedNPCs = new Set(); // transient UI state — which roster cards are open
 function toggleNPCCard(name){
   if(expandedNPCs.has(name)) expandedNPCs.delete(name); else expandedNPCs.add(name);
@@ -2225,6 +2246,26 @@ function startRelocateCapital(role, settlementId){
   ROLES.forEach(([r])=>{ if(state.leaders[r].name && !state.leaders[r].vacant) state.leadershipUsed[r] = leadershipActivityCap(r); });
   openDegreePicker('Relocate Capital', d=>resolveLeadershipActivity(role, 'Relocate Capital', d, {settlementId}));
 }
+function onLeadershipGroupSelectChange(){
+  const val = document.getElementById('leadership-extra-group-select').value;
+  const input = document.getElementById('leadership-extra-group');
+  const desc = document.getElementById('leadership-group-desc');
+  if(val==='__custom__'){
+    input.style.display = '';
+    input.value = '';
+    input.focus();
+    desc.textContent = '';
+  } else if(val===''){
+    input.style.display = 'none';
+    input.value = '';
+    desc.textContent = '';
+  } else {
+    input.style.display = 'none';
+    input.value = val;
+    const n = KM_NATIONS.find(x=>x.name===val);
+    desc.textContent = n ? n.description : '';
+  }
+}
 function openLeadershipTextInput(role, name){
   const def = LEADERSHIP_ACTIVITIES[name];
   const overlay = document.createElement('div');
@@ -2232,7 +2273,16 @@ function openLeadershipTextInput(role, name){
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:110;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `<div class="card" style="max-width:340px;width:100%;margin:0;">
     <h3>${escapeHtml(name)}</h3>
-    ${def.needsGroupInput ? `<div class="row"><div class="label">Group / faction${def.needsGroupInput==='optional'?' (optional)':''}</div><input type="text" class="wide" id="leadership-extra-group" placeholder="e.g. the Sootscale goblins"></div>` : ''}
+    ${def.needsGroupInput ? `<div class="row" style="flex-direction:column;align-items:stretch;">
+      <div class="label">Group / nation${def.needsGroupInput==='optional'?' (optional)':''}</div>
+      <select class="wide" id="leadership-extra-group-select" onchange="onLeadershipGroupSelectChange()">
+        <option value="">${def.needsGroupInput==='optional'?'— none —':'— choose —'}</option>
+        ${KM_NATIONS.map(n=>`<option value="${escapeAttr(n.name)}">${escapeHtml(n.name)}</option>`).join('')}
+        <option value="__custom__">Custom…</option>
+      </select>
+      <div class="hint" id="leadership-group-desc" style="margin-top:4px;"></div>
+      <input type="text" class="wide" id="leadership-extra-group" style="margin-top:6px;display:none;" placeholder="Group or faction name">
+    </div>` : ''}
     ${def.needsHexInput ? `<div class="row"><div class="label">Their hex${def.needsHexInput==='optional'?' (optional)':''}</div><input type="text" class="wide" id="leadership-extra-hex" style="max-width:100px;" placeholder="e.g. F6"></div>` : ''}
     <button class="action" style="margin-top:8px;" onclick="confirmLeadershipTextInput('${role}','${escapeAttr(name)}')">Continue</button>
     <button class="ghost" style="margin-top:8px;" onclick="document.getElementById('leadership-extra-overlay').remove();">Cancel</button>
