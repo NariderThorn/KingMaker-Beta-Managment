@@ -292,7 +292,7 @@ const ARMY_ACTIONS = {
 const XP_SOURCES = ['Claimed a Landmark Hex','Established a Village','Established a Fort','Reached a Size milestone','Established Diplomatic Relations','Expanded a Settlement','Won a Battle','Completed a Quest','Resolved a Kingdom Event','Other'];
 const SIZE_MILESTONES = [10,25,50,100];
 
-const APP_VERSION = 'v2.0.0';
+const APP_VERSION = 'v2.0.1';
 const GITHUB_REPO = 'NariderThorn/KingMaker-Beta-Managment';
 
 /* update status cache — checked once per session from loadState(), then just
