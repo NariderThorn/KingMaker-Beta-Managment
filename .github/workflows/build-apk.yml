@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +25,7 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        continue-on-error: true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
