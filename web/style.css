@@ -411,3 +411,7 @@
   .vf-f span{font-size:10px;}
   .boost-picker.three{grid-template-columns:repeat(3,1fr);}
   .hex-panel-inner textarea{width:100%;}
+
+  /* ---------- iPhone notch / status bar ---------- */
+  body{padding-top:env(safe-area-inset-top);}
+  .kl-overlay,#hex-panel,#info-tip-overlay{padding-top:max(16px, env(safe-area-inset-top)) !important;}
