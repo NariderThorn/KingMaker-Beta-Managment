@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#12181B">
 <meta name="apple-mobile-web-app-title" content="Kingdom Ledger">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
@@ -20,6 +21,14 @@
 // Same page/origin either way, so saved kingdoms in localStorage are unaffected.
 (function(){
   try{
+    // Hot updates are only for the installed Android app (file:// page). On the
+    // website (iPhone, browsers) the server always has the newest files, so any
+    // leftover override would only pin an older version — clear it instead.
+    if(location.protocol!=='file:'){
+      localStorage.removeItem('hotupdate-style-css');
+      localStorage.removeItem('hotupdate-app-js');
+      return;
+    }
     var cssOverride = localStorage.getItem('hotupdate-style-css');
     if(cssOverride){
       var blob = new Blob([cssOverride], {type:'text/css'});
@@ -222,7 +231,7 @@
 <script>
 (function(){
   var override = null;
-  try{ override = localStorage.getItem('hotupdate-app-js'); }catch(e){}
+  try{ if(location.protocol==='file:') override = localStorage.getItem('hotupdate-app-js'); }catch(e){}
   var s = document.createElement('script');
   if(override){
     s.textContent = override;
