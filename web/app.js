@@ -292,12 +292,23 @@ const ARMY_ACTIONS = {
 const XP_SOURCES = ['Claimed a Landmark Hex','Established a Village','Established a Fort','Reached a Size milestone','Established Diplomatic Relations','Expanded a Settlement','Won a Battle','Completed a Quest','Resolved a Kingdom Event','Other'];
 const SIZE_MILESTONES = [10,25,50,100];
 
-const APP_VERSION = 'v2.0.1';
+const APP_VERSION = 'v2.0.2';
 const GITHUB_REPO = 'NariderThorn/KingMaker-Beta-Managment';
 
 /* update status cache — checked once per session from loadState(), then just
    read back on every picker render. See renderUpdateSection() below. */
 let updateCheck = {status:'checking', tag:null};
+// The installed Android app loads from file://; the website (iPhone Home Screen,
+// any browser) loads from https and always gets the newest files from the server.
+const IS_WEB_BUILD = /^https?:$/.test(location.protocol) && !window.AndroidUpdater;
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+// Compares 'v2.0.10' style tags numerically; >0 when a is newer than b.
+function compareVersions(a, b){
+  const pa = String(a||'').replace(/^v/i,'').split('.').map(n=>parseInt(n,10)||0);
+  const pb = String(b||'').replace(/^v/i,'').split('.').map(n=>parseInt(n,10)||0);
+  for(let i=0;i<Math.max(pa.length,pb.length);i++){ const d=(pa[i]||0)-(pb[i]||0); if(d) return d; }
+  return 0;
+}
 let updateCheckedThisSession = false;
 function isKingdomPickerVisible(){
   const el = document.getElementById('creation-screen');
@@ -311,9 +322,9 @@ async function checkForUpdateOnce(){
     if(!res.ok) throw new Error('request failed');
     const data = await res.json();
     if(!data.tag_name) throw new Error('no release found');
-    updateCheck = (data.tag_name === APP_VERSION)
-      ? {status:'current', tag:data.tag_name}
-      : {status:'available', tag:data.tag_name};
+    updateCheck = (compareVersions(data.tag_name, APP_VERSION) > 0)
+      ? {status:'available', tag:data.tag_name}
+      : {status:'current', tag:data.tag_name};
   }catch(e){
     updateCheck = {status:'error', tag:null};
   }
@@ -363,6 +374,20 @@ async function applyHotUpdate(){
     resultEl.textContent = "Update failed: " + e.message + ". Nothing was changed.";
     if(btn){ btn.textContent = 'Quick update (no reinstall)'; btn.disabled = false; }
   }
+}
+// Website version: the newest files are already on the server — refresh the
+// offline cache and reload. No download into storage, nothing to reinstall.
+async function reloadForWebUpdate(){
+  const resultEl = document.getElementById('update-check-result');
+  if(resultEl) resultEl.textContent = 'Getting the latest version…';
+  try{
+    if('serviceWorker' in navigator){
+      const reg = await navigator.serviceWorker.getRegistration();
+      if(reg) await reg.update();
+    }
+    if(window.caches){ const keys = await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); }
+  }catch(e){}
+  location.reload();
 }
 function resetToBundledVersion(){
   if(!confirm('This clears the downloaded update and goes back to the version built into the app. Your kingdoms are not affected. Continue?')) return;
@@ -437,7 +462,7 @@ const KM_NATIONS = [
   {name:'Numeria', description:"Ruled by a former tribal warlord whose capital is built around the wreck of something not of this world. Once controlled by a cabal of scavenger-mages who exploited that wreckage's strange effects on him, he's since turned on them."}
 ];
 
-const V2_CSS = "\n  /* ---------- rules v2 screens ---------- */\n  .attention-card{border-color:var(--gold-dim);background:rgba(201,162,75,0.06);}\n  .attention-item{font-size:12px;line-height:1.5;color:var(--text);padding:7px 0;border-bottom:1px solid var(--border);}\n  .attention-item:last-child{border-bottom:none;}\n  .attention-item .loc-link{color:var(--gold);}\n  .turn-card{border-color:var(--gold-dim);}\n  .vf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}\n  .vf-cell{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 8px;}\n  .vf-v,.vf-f{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;}\n  .vf-v span{color:var(--text);} .vf-v b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .vf-f span{color:var(--text-muted);} .vf-f b{font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:12px;}\n  .vf-f.over span,.vf-f.over b{color:var(--rust);font-weight:700;}\n  .vf-mod{font-size:10px;color:var(--text-muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}\n  .vf-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}\n  .vf-name{font-family:'Cinzel',serif;font-weight:600;font-size:14px;color:var(--text);}\n  .vf-name.over,.vf-big.over{color:var(--rust);}\n  .vf-big{font-size:28px;color:var(--gold);line-height:1.1;}\n  .vf-head > div:last-child .vf-big{color:#d99a82;}\n  .vf-head > div:last-child .vf-big.over{color:var(--rust);}\n  .vf-vs{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;}\n  .ruin-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:8px;border:1px solid var(--border);}\n  .ruin-bar > div{height:100%;background:linear-gradient(90deg,#8a5a42,var(--rust));}\n  .check-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin:10px 0 4px;}\n  .check-line{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--text);}\n  .degree-banner{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-radius:8px;padding:9px 11px;font-size:13px;border:1px solid var(--border);}\n  .degree-banner .mono{font-size:11px;opacity:0.85;}\n  .deg-crit{background:rgba(201,162,75,0.16);border-color:var(--gold);color:var(--gold);}\n  .deg-success{background:rgba(92,139,114,0.16);border-color:var(--forest);color:#8fbf9e;}\n  .deg-fail{background:rgba(177,92,66,0.12);border-color:#7d4a3a;color:#d99a82;}\n  .deg-critfail{background:rgba(177,92,66,0.22);border-color:var(--rust);color:#e8a58c;}\n  .draft-preview{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:14px;}\n  .draft-preview > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 2px;text-align:center;display:flex;flex-direction:column;}\n  .draft-preview span{font-size:9px;color:var(--text-muted);letter-spacing:0.05em;}\n  .draft-preview b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .draft-preview i{font-style:normal;font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:10px;min-height:12px;}\n  .council-card select{width:100%;}\n  .seat-bonus-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0;}\n  .seat-bonus-grid > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;text-align:center;display:flex;flex-direction:column;font-size:9px;color:var(--text-muted);}\n  .seat-bonus-grid b{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}\n  .seat-bonus-grid .pos b{color:#8fbf9e;} .seat-bonus-grid .neg b{color:#d99a82;}\n  .trait-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}\n  .trait{font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid var(--border);color:var(--text-muted);}\n  .trait.on{border-color:var(--forest);color:#8fbf9e;}\n  .bld-group{margin-top:6px;}\n  .bld-root{display:block;font-size:10px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;}\n  .option-card.locked{opacity:0.55;cursor:default;}\n  .bld-card{cursor:default;padding:10px 12px;}\n  .turn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}\n  .turn-head .small-ghost{flex:0 0 auto;}\n  .turn-dots{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin:12px 0 10px;}\n  .turn-dots button{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:5px;font-size:11px;padding:5px 0;cursor:pointer;font-family:'IBM Plex Mono',monospace;}\n  .turn-dots button.done{border-color:var(--forest);color:#8fbf9e;}\n  .turn-dots button.active{border-color:var(--gold);color:var(--bg);background:var(--gold);}\n  .turn-body{min-height:120px;}\n  .step-tag{display:inline-block;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:10px;border:1px solid var(--border);}\n  .step-tag.roll{color:var(--blue);border-color:var(--blue);}\n  .step-tag.check{color:var(--gold);border-color:var(--gold-dim);}\n  .step-tag.auto{color:#8fbf9e;border-color:var(--forest);}\n  .step-tag.done{color:var(--bg);background:var(--forest);border-color:var(--forest);}\n  .counter-line{font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;margin:8px 0;}\n  .counter-line b{color:var(--gold);font-family:'IBM Plex Mono',monospace;}\n  .counter-line.spent{color:var(--text-muted);} .counter-line.spent b{color:var(--text-muted);}\n  .big-roll{font-size:34px;color:var(--gold);text-align:center;margin:8px 0;}\n  .unit-row{border-top:1px solid var(--border);padding:9px 0;}\n  .unit-top{display:flex;justify-content:space-between;font-size:13px;}\n  .hp-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:4px;border:1px solid var(--border);}\n  .hp-bar > div{height:100%;background:var(--forest);}\n  .unit-ref{border-top:1px solid var(--border);padding:8px 0;}\n  .unit-ref .opt-name{font-family:'Cinzel',serif;font-weight:600;font-size:13px;}\n  .kl-overlay .card{box-shadow:0 10px 40px rgba(0,0,0,0.5);}\n\n  .vf-v span,.vf-f span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;margin-right:4px;}\n  .vf-f span{font-size:10px;}\n  .boost-picker.three{grid-template-columns:repeat(3,1fr);}\n  .hex-panel-inner textarea{width:100%;}\n";
+const V2_CSS = "\n  /* ---------- rules v2 screens ---------- */\n  .attention-card{border-color:var(--gold-dim);background:rgba(201,162,75,0.06);}\n  .attention-item{font-size:12px;line-height:1.5;color:var(--text);padding:7px 0;border-bottom:1px solid var(--border);}\n  .attention-item:last-child{border-bottom:none;}\n  .attention-item .loc-link{color:var(--gold);}\n  .turn-card{border-color:var(--gold-dim);}\n  .vf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}\n  .vf-cell{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 8px;}\n  .vf-v,.vf-f{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;}\n  .vf-v span{color:var(--text);} .vf-v b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .vf-f span{color:var(--text-muted);} .vf-f b{font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:12px;}\n  .vf-f.over span,.vf-f.over b{color:var(--rust);font-weight:700;}\n  .vf-mod{font-size:10px;color:var(--text-muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}\n  .vf-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}\n  .vf-name{font-family:'Cinzel',serif;font-weight:600;font-size:14px;color:var(--text);}\n  .vf-name.over,.vf-big.over{color:var(--rust);}\n  .vf-big{font-size:28px;color:var(--gold);line-height:1.1;}\n  .vf-head > div:last-child .vf-big{color:#d99a82;}\n  .vf-head > div:last-child .vf-big.over{color:var(--rust);}\n  .vf-vs{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;}\n  .ruin-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:8px;border:1px solid var(--border);}\n  .ruin-bar > div{height:100%;background:linear-gradient(90deg,#8a5a42,var(--rust));}\n  .check-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin:10px 0 4px;}\n  .check-line{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--text);}\n  .degree-banner{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-radius:8px;padding:9px 11px;font-size:13px;border:1px solid var(--border);}\n  .degree-banner .mono{font-size:11px;opacity:0.85;}\n  .deg-crit{background:rgba(201,162,75,0.16);border-color:var(--gold);color:var(--gold);}\n  .deg-success{background:rgba(92,139,114,0.16);border-color:var(--forest);color:#8fbf9e;}\n  .deg-fail{background:rgba(177,92,66,0.12);border-color:#7d4a3a;color:#d99a82;}\n  .deg-critfail{background:rgba(177,92,66,0.22);border-color:var(--rust);color:#e8a58c;}\n  .draft-preview{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:14px;}\n  .draft-preview > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 2px;text-align:center;display:flex;flex-direction:column;}\n  .draft-preview span{font-size:9px;color:var(--text-muted);letter-spacing:0.05em;}\n  .draft-preview b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .draft-preview i{font-style:normal;font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:10px;min-height:12px;}\n  .council-card select{width:100%;}\n  .seat-bonus-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0;}\n  .seat-bonus-grid > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;text-align:center;display:flex;flex-direction:column;font-size:9px;color:var(--text-muted);}\n  .seat-bonus-grid b{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}\n  .seat-bonus-grid .pos b{color:#8fbf9e;} .seat-bonus-grid .neg b{color:#d99a82;}\n  .trait-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}\n  .trait{font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid var(--border);color:var(--text-muted);}\n  .trait.on{border-color:var(--forest);color:#8fbf9e;}\n  .bld-group{margin-top:6px;}\n  .bld-root{display:block;font-size:10px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;}\n  .option-card.locked{opacity:0.55;cursor:default;}\n  .bld-card{cursor:default;padding:10px 12px;}\n  .turn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}\n  .turn-head .small-ghost{flex:0 0 auto;}\n  .turn-dots{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin:12px 0 10px;}\n  .turn-dots button{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:5px;font-size:11px;padding:5px 0;cursor:pointer;font-family:'IBM Plex Mono',monospace;}\n  .turn-dots button.done{border-color:var(--forest);color:#8fbf9e;}\n  .turn-dots button.active{border-color:var(--gold);color:var(--bg);background:var(--gold);}\n  .turn-body{min-height:120px;}\n  .step-tag{display:inline-block;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:10px;border:1px solid var(--border);}\n  .step-tag.roll{color:var(--blue);border-color:var(--blue);}\n  .step-tag.check{color:var(--gold);border-color:var(--gold-dim);}\n  .step-tag.auto{color:#8fbf9e;border-color:var(--forest);}\n  .step-tag.done{color:var(--bg);background:var(--forest);border-color:var(--forest);}\n  .counter-line{font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;margin:8px 0;}\n  .counter-line b{color:var(--gold);font-family:'IBM Plex Mono',monospace;}\n  .counter-line.spent{color:var(--text-muted);} .counter-line.spent b{color:var(--text-muted);}\n  .big-roll{font-size:34px;color:var(--gold);text-align:center;margin:8px 0;}\n  .unit-row{border-top:1px solid var(--border);padding:9px 0;}\n  .unit-top{display:flex;justify-content:space-between;font-size:13px;}\n  .hp-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:4px;border:1px solid var(--border);}\n  .hp-bar > div{height:100%;background:var(--forest);}\n  .unit-ref{border-top:1px solid var(--border);padding:8px 0;}\n  .unit-ref .opt-name{font-family:'Cinzel',serif;font-weight:600;font-size:13px;}\n  .kl-overlay .card{box-shadow:0 10px 40px rgba(0,0,0,0.5);}\n\n  .vf-v span,.vf-f span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;margin-right:4px;}\n  .vf-f span{font-size:10px;}\n  .boost-picker.three{grid-template-columns:repeat(3,1fr);}\n  .hex-panel-inner textarea{width:100%;}\n\n  /* ---------- iPhone notch / status bar ---------- */\n  body{padding-top:env(safe-area-inset-top);}\n  .kl-overlay,#hex-panel,#info-tip-overlay{padding-top:max(16px, env(safe-area-inset-top)) !important;}\n";
 
 
 /* =====================================================================
@@ -895,14 +920,23 @@ async function loadState(){
   showKingdomPicker();
   checkForUpdateOnce();
 }
-function downloadJsonFile(jsonText, nameHint){
+async function downloadJsonFile(jsonText, nameHint){
   const blob = new Blob([jsonText], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const safeName = (nameHint||'kingdom').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
   const date = new Date().toISOString().slice(0,10);
+  const fileName = `${safeName || 'kingdom'}-${date}.json`;
+  // iPhone: a Home Screen app can't drop files into Downloads, so hand the backup
+  // to the share sheet (Save to Files, AirDrop, Messages…) instead.
+  if(IS_IOS && navigator.canShare){
+    try{
+      const file = new File([blob], fileName, {type:'application/json'});
+      if(navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:fileName}); return; }
+    }catch(e){ if(e && e.name==='AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
   a.href = url;
-  a.download = `${safeName || 'kingdom'}-${date}.json`;
+  a.download = fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1163,7 +1197,7 @@ function renderCreationScreen(){
               <button type="button" class="kingdom-row-delete" onclick="confirmDeleteKingdom('${k.id}')" title="Delete">✕</button>
             </div>`).join('')}
         </div>` : ''}
-      <input type="file" accept="application/json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
+      <input type="file" accept="application/json,.json" id="creation-import-input" style="display:none;" onchange="importStateFile(this)">
       <button class="ghost" style="margin-top:14px;" onclick="document.getElementById('creation-import-input').click()">↑ Load from a backup file</button>
       <div class="card" style="margin-top:20px;">
         <h3>Backup</h3>
@@ -1172,11 +1206,14 @@ function renderCreationScreen(){
       <div class="card">
         <h3>App Version <span class="sub">${APP_VERSION}${isHotUpdated()?' (hot-updated)':''}</span></h3>
         <div class="hint" style="margin-top:0;" id="update-check-result">${renderUpdateStatusLine()}</div>
-        ${updateCheck.status==='available' ? `
+        ${updateCheck.status==='available' ? (IS_WEB_BUILD ? `
+          <button class="ghost" style="margin-top:8px;" onclick="reloadForWebUpdate()">Update now (reload)</button>
+        ` : `
           <button class="ghost" id="hot-update-btn" style="margin-top:8px;" onclick="applyHotUpdate()">Quick update (no reinstall)</button>
           ${window.AndroidUpdater ? `<button class="ghost" id="full-update-btn" style="margin-top:8px;" onclick="downloadAndInstallLatestApk()">Full update (new install)</button>` : ''}
-        ` : ''}
-        ${isHotUpdated() ? `<button class="ghost danger-ghost" style="margin-top:8px;" onclick="resetToBundledVersion()">Reset to version built into the app</button>` : ''}
+        `) : ''}
+        ${!IS_WEB_BUILD && isHotUpdated() ? `<button class="ghost danger-ghost" style="margin-top:8px;" onclick="resetToBundledVersion()">Reset to version built into the app</button>` : ''}
+        ${IS_WEB_BUILD && IS_IOS && !navigator.standalone ? `<div class="hint">On iPhone, tap Share → <b>Add to Home Screen</b> to install this as an app. Kingdoms you make in a Safari tab stay in Safari — make them from the Home Screen icon instead.</div>` : ''}
       </div>`;
   }
   else if(creationStep===1){
@@ -2810,6 +2847,16 @@ let mapZoom = 1, mapPanX = 0, mapPanY = 0;
 let mapNaturalW = 0, mapNaturalH = 0;
 const MAP_MIN_ZOOM = 1, MAP_MAX_ZOOM = 6;
 
+function safeAreaTop(){
+  let probe = document.getElementById('safe-area-probe');
+  if(!probe){
+    probe = document.createElement('div');
+    probe.id = 'safe-area-probe';
+    probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none;';
+    document.body.appendChild(probe);
+  }
+  return probe.getBoundingClientRect().height || 0;
+}
 function measureMapLayout(){
   const header = document.querySelector('header.top');
   const nav = document.querySelector('nav.bottom');
@@ -2818,7 +2865,9 @@ function measureMapLayout(){
   // measure off window.innerWidth/innerHeight directly rather than trusting the
   // position:fixed wrapper's own clientWidth/clientHeight, which was reporting a
   // much smaller box than the real viewport in some embedded/preview contexts
-  const headerH = header.style.display==='none' ? 0 : header.getBoundingClientRect().height;
+  // On a notched iPhone the page runs under the status bar; the header already
+  // includes that inset (body padding), the full-screen map needs it added.
+  const headerH = header.style.display==='none' ? safeAreaTop() : header.getBoundingClientRect().bottom;
   const navH = nav.getBoundingClientRect().height;
   document.documentElement.style.setProperty('--map-top', headerH+'px');
   document.documentElement.style.setProperty('--map-bottom', navH+'px');
@@ -3235,4 +3284,10 @@ window.addEventListener('resize', ()=>{ if(document.getElementById('tab-map').cl
   document.head.appendChild(st);
 })();
 
+// Offline support for the website / iPhone Home Screen app. Not used by the
+// Android app (file:// pages can't have service workers).
+if(IS_WEB_BUILD && 'serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+  if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
+}
 loadState();
