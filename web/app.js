@@ -292,7 +292,7 @@ const ARMY_ACTIONS = {
 const XP_SOURCES = ['Claimed a Landmark Hex','Established a Village','Established a Fort','Reached a Size milestone','Established Diplomatic Relations','Expanded a Settlement','Won a Battle','Completed a Quest','Resolved a Kingdom Event','Other'];
 const SIZE_MILESTONES = [10,25,50,100];
 
-const APP_VERSION = 'v2.0.2';
+const APP_VERSION = 'v2.0.3';
 const GITHUB_REPO = 'NariderThorn/KingMaker-Beta-Managment';
 
 /* update status cache — checked once per session from loadState(), then just
@@ -462,7 +462,7 @@ const KM_NATIONS = [
   {name:'Numeria', description:"Ruled by a former tribal warlord whose capital is built around the wreck of something not of this world. Once controlled by a cabal of scavenger-mages who exploited that wreckage's strange effects on him, he's since turned on them."}
 ];
 
-const V2_CSS = "\n  /* ---------- rules v2 screens ---------- */\n  .attention-card{border-color:var(--gold-dim);background:rgba(201,162,75,0.06);}\n  .attention-item{font-size:12px;line-height:1.5;color:var(--text);padding:7px 0;border-bottom:1px solid var(--border);}\n  .attention-item:last-child{border-bottom:none;}\n  .attention-item .loc-link{color:var(--gold);}\n  .turn-card{border-color:var(--gold-dim);}\n  .vf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}\n  .vf-cell{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 8px;}\n  .vf-v,.vf-f{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;}\n  .vf-v span{color:var(--text);} .vf-v b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .vf-f span{color:var(--text-muted);} .vf-f b{font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:12px;}\n  .vf-f.over span,.vf-f.over b{color:var(--rust);font-weight:700;}\n  .vf-mod{font-size:10px;color:var(--text-muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}\n  .vf-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}\n  .vf-name{font-family:'Cinzel',serif;font-weight:600;font-size:14px;color:var(--text);}\n  .vf-name.over,.vf-big.over{color:var(--rust);}\n  .vf-big{font-size:28px;color:var(--gold);line-height:1.1;}\n  .vf-head > div:last-child .vf-big{color:#d99a82;}\n  .vf-head > div:last-child .vf-big.over{color:var(--rust);}\n  .vf-vs{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;}\n  .ruin-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:8px;border:1px solid var(--border);}\n  .ruin-bar > div{height:100%;background:linear-gradient(90deg,#8a5a42,var(--rust));}\n  .check-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin:10px 0 4px;}\n  .check-line{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--text);}\n  .degree-banner{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-radius:8px;padding:9px 11px;font-size:13px;border:1px solid var(--border);}\n  .degree-banner .mono{font-size:11px;opacity:0.85;}\n  .deg-crit{background:rgba(201,162,75,0.16);border-color:var(--gold);color:var(--gold);}\n  .deg-success{background:rgba(92,139,114,0.16);border-color:var(--forest);color:#8fbf9e;}\n  .deg-fail{background:rgba(177,92,66,0.12);border-color:#7d4a3a;color:#d99a82;}\n  .deg-critfail{background:rgba(177,92,66,0.22);border-color:var(--rust);color:#e8a58c;}\n  .draft-preview{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:14px;}\n  .draft-preview > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 2px;text-align:center;display:flex;flex-direction:column;}\n  .draft-preview span{font-size:9px;color:var(--text-muted);letter-spacing:0.05em;}\n  .draft-preview b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .draft-preview i{font-style:normal;font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:10px;min-height:12px;}\n  .council-card select{width:100%;}\n  .seat-bonus-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0;}\n  .seat-bonus-grid > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;text-align:center;display:flex;flex-direction:column;font-size:9px;color:var(--text-muted);}\n  .seat-bonus-grid b{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}\n  .seat-bonus-grid .pos b{color:#8fbf9e;} .seat-bonus-grid .neg b{color:#d99a82;}\n  .trait-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}\n  .trait{font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid var(--border);color:var(--text-muted);}\n  .trait.on{border-color:var(--forest);color:#8fbf9e;}\n  .bld-group{margin-top:6px;}\n  .bld-root{display:block;font-size:10px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;}\n  .option-card.locked{opacity:0.55;cursor:default;}\n  .bld-card{cursor:default;padding:10px 12px;}\n  .turn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}\n  .turn-head .small-ghost{flex:0 0 auto;}\n  .turn-dots{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin:12px 0 10px;}\n  .turn-dots button{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:5px;font-size:11px;padding:5px 0;cursor:pointer;font-family:'IBM Plex Mono',monospace;}\n  .turn-dots button.done{border-color:var(--forest);color:#8fbf9e;}\n  .turn-dots button.active{border-color:var(--gold);color:var(--bg);background:var(--gold);}\n  .turn-body{min-height:120px;}\n  .step-tag{display:inline-block;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:10px;border:1px solid var(--border);}\n  .step-tag.roll{color:var(--blue);border-color:var(--blue);}\n  .step-tag.check{color:var(--gold);border-color:var(--gold-dim);}\n  .step-tag.auto{color:#8fbf9e;border-color:var(--forest);}\n  .step-tag.done{color:var(--bg);background:var(--forest);border-color:var(--forest);}\n  .counter-line{font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;margin:8px 0;}\n  .counter-line b{color:var(--gold);font-family:'IBM Plex Mono',monospace;}\n  .counter-line.spent{color:var(--text-muted);} .counter-line.spent b{color:var(--text-muted);}\n  .big-roll{font-size:34px;color:var(--gold);text-align:center;margin:8px 0;}\n  .unit-row{border-top:1px solid var(--border);padding:9px 0;}\n  .unit-top{display:flex;justify-content:space-between;font-size:13px;}\n  .hp-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:4px;border:1px solid var(--border);}\n  .hp-bar > div{height:100%;background:var(--forest);}\n  .unit-ref{border-top:1px solid var(--border);padding:8px 0;}\n  .unit-ref .opt-name{font-family:'Cinzel',serif;font-weight:600;font-size:13px;}\n  .kl-overlay .card{box-shadow:0 10px 40px rgba(0,0,0,0.5);}\n\n  .vf-v span,.vf-f span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;margin-right:4px;}\n  .vf-f span{font-size:10px;}\n  .boost-picker.three{grid-template-columns:repeat(3,1fr);}\n  .hex-panel-inner textarea{width:100%;}\n\n  /* ---------- iPhone notch / status bar ---------- */\n  body{padding-top:env(safe-area-inset-top);}\n  .kl-overlay,#hex-panel,#info-tip-overlay{padding-top:max(16px, env(safe-area-inset-top)) !important;}\n";
+const V2_CSS = "\n  /* ---------- rules v2 screens ---------- */\n  .attention-card{border-color:var(--gold-dim);background:rgba(201,162,75,0.06);}\n  .attention-item{font-size:12px;line-height:1.5;color:var(--text);padding:7px 0;border-bottom:1px solid var(--border);}\n  .attention-item:last-child{border-bottom:none;}\n  .attention-item .loc-link{color:var(--gold);}\n  .turn-card{border-color:var(--gold-dim);}\n  .vf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}\n  .vf-cell{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 8px;}\n  .vf-v,.vf-f{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;}\n  .vf-v span{color:var(--text);} .vf-v b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .vf-f span{color:var(--text-muted);} .vf-f b{font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:12px;}\n  .vf-f.over span,.vf-f.over b{color:var(--rust);font-weight:700;}\n  .vf-mod{font-size:10px;color:var(--text-muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}\n  .vf-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}\n  .vf-name{font-family:'Cinzel',serif;font-weight:600;font-size:14px;color:var(--text);}\n  .vf-name.over,.vf-big.over{color:var(--rust);}\n  .vf-big{font-size:28px;color:var(--gold);line-height:1.1;}\n  .vf-head > div:last-child .vf-big{color:#d99a82;}\n  .vf-head > div:last-child .vf-big.over{color:var(--rust);}\n  .vf-vs{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;}\n  .ruin-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:8px;border:1px solid var(--border);}\n  .ruin-bar > div{height:100%;background:linear-gradient(90deg,#8a5a42,var(--rust));}\n  .check-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin:10px 0 4px;}\n  .check-line{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--text);}\n  .degree-banner{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-radius:8px;padding:9px 11px;font-size:13px;border:1px solid var(--border);}\n  .degree-banner .mono{font-size:11px;opacity:0.85;}\n  .deg-crit{background:rgba(201,162,75,0.16);border-color:var(--gold);color:var(--gold);}\n  .deg-success{background:rgba(92,139,114,0.16);border-color:var(--forest);color:#8fbf9e;}\n  .deg-fail{background:rgba(177,92,66,0.12);border-color:#7d4a3a;color:#d99a82;}\n  .deg-critfail{background:rgba(177,92,66,0.22);border-color:var(--rust);color:#e8a58c;}\n  .draft-preview{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:14px;}\n  .draft-preview > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 2px;text-align:center;display:flex;flex-direction:column;}\n  .draft-preview span{font-size:9px;color:var(--text-muted);letter-spacing:0.05em;}\n  .draft-preview b{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-size:15px;}\n  .draft-preview i{font-style:normal;font-family:'IBM Plex Mono',monospace;color:#d99a82;font-size:10px;min-height:12px;}\n  .council-card select{width:100%;}\n  .seat-bonus-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0;}\n  .seat-bonus-grid > div{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;text-align:center;display:flex;flex-direction:column;font-size:9px;color:var(--text-muted);}\n  .seat-bonus-grid b{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}\n  .seat-bonus-grid .pos b{color:#8fbf9e;} .seat-bonus-grid .neg b{color:#d99a82;}\n  .trait-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}\n  .trait{font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid var(--border);color:var(--text-muted);}\n  .trait.on{border-color:var(--forest);color:#8fbf9e;}\n  .bld-group{margin-top:6px;}\n  .bld-root{display:block;font-size:10px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;}\n  .option-card.locked{opacity:0.55;cursor:default;}\n  .bld-card{cursor:default;padding:10px 12px;}\n  .turn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}\n  .turn-head .small-ghost{flex:0 0 auto;}\n  .turn-dots{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin:12px 0 10px;}\n  .turn-dots button{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:5px;font-size:11px;padding:5px 0;cursor:pointer;font-family:'IBM Plex Mono',monospace;}\n  .turn-dots button.done{border-color:var(--forest);color:#8fbf9e;}\n  .turn-dots button.active{border-color:var(--gold);color:var(--bg);background:var(--gold);}\n  .turn-body{min-height:120px;}\n  .step-tag{display:inline-block;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:10px;border:1px solid var(--border);}\n  .step-tag.roll{color:var(--blue);border-color:var(--blue);}\n  .step-tag.check{color:var(--gold);border-color:var(--gold-dim);}\n  .step-tag.auto{color:#8fbf9e;border-color:var(--forest);}\n  .step-tag.done{color:var(--bg);background:var(--forest);border-color:var(--forest);}\n  .counter-line{font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;margin:8px 0;}\n  .counter-line b{color:var(--gold);font-family:'IBM Plex Mono',monospace;}\n  .counter-line.spent{color:var(--text-muted);} .counter-line.spent b{color:var(--text-muted);}\n  .big-roll{font-size:34px;color:var(--gold);text-align:center;margin:8px 0;}\n  .unit-row{border-top:1px solid var(--border);padding:9px 0;}\n  .unit-top{display:flex;justify-content:space-between;font-size:13px;}\n  .hp-bar{height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:4px;border:1px solid var(--border);}\n  .hp-bar > div{height:100%;background:var(--forest);}\n  .unit-ref{border-top:1px solid var(--border);padding:8px 0;}\n  .unit-ref .opt-name{font-family:'Cinzel',serif;font-weight:600;font-size:13px;}\n  .kl-overlay .card{box-shadow:0 10px 40px rgba(0,0,0,0.5);}\n\n  .vf-v span,.vf-f span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;margin-right:4px;}\n  .vf-f span{font-size:10px;}\n  .boost-picker.three{grid-template-columns:repeat(3,1fr);}\n  .hex-panel-inner textarea{width:100%;}\n\n  /* ---------- iPhone notch / status bar ---------- */\n  body{padding-top:env(safe-area-inset-top);}\n  .kl-overlay,#hex-panel,#info-tip-overlay{padding-top:max(16px, env(safe-area-inset-top)) !important;}\n  /* ---------- turn guide: pinned header + nav ---------- */\n  .turn-sticky{position:sticky;top:-16px;margin:-16px -16px 0;padding:16px 16px 2px;background:var(--surface);z-index:3;border-radius:10px 10px 0 0;}\n  .turn-sticky .counter-line{margin:0 0 10px;}\n  .turn-dots button.missed{border-color:var(--rust);color:#e8a58c;}\n  .turn-todo{color:#d99a82;margin-top:12px;}\n  .turn-nav{position:sticky;bottom:-16px;margin:14px -16px -16px;padding:10px 16px 16px;background:var(--surface);z-index:3;border-top:1px solid var(--border);border-radius:0 0 10px 10px;}\n  .gm-adjust{margin-top:10px;}\n  .gm-adjust summary{cursor:pointer;font-size:12px;color:var(--text-muted);padding:4px 0;}\n  .draft-preview.full{grid-template-columns:repeat(3,1fr);}\n  .draft-preview.full span{font-size:10px;}\n";
 
 
 /* =====================================================================
@@ -568,6 +568,13 @@ function seatBonusParts(role){
   return parts;
 }
 function seatBonus(role){ return sumAmt(seatBonusParts(role)); }
+// Which rolls a seat's bonus goes to, in the player's words.
+function seatArea(role){
+  if(role==='Counselor') return 'all checks';
+  if(role==='Emissary') return 'diplomacy & spying actions';
+  const v = Object.keys(VIRTUE_COUNCILOR).find(x=>VIRTUE_COUNCILOR[x]===role);
+  return v ? v+' checks' : 'its actions';
+}
 function companionSeat(name){ return COUNCIL_ROLES.find(r=>state.council[r].holder===name) || null; }
 
 /* ---------- checks: d20 + virtue − opposing flaw + councilor (+ Counselor on every check) ---------- */
@@ -1060,7 +1067,7 @@ function renderCheckDialog(){
     ${c.note ? `<div class="hint" style="margin-top:0;">${c.note}</div>` : ''}
     ${c.altVirtue ? `<div class="boost-picker" style="margin-top:8px;">${[c.virtue,c.altVirtue].map(v=>`<button type="button" class="${virtue===v?'selected':''}" onclick="pendingCheck.virtueChosen='${v}';renderCheckDialog();">${v} check</button>`).join('')}</div>` : ''}
     <div class="check-box">
-      <div class="check-line"><span>${VIRTUE_SHORT[virtue]} check</span><span class="mono">d20 ${mod>=0?'+':'−'} ${Math.abs(mod)} vs DC ${dc}${infoIcon('Kingdom Check')}</span></div>
+      <div class="check-line"><span>${virtue} check</span><span class="mono">d20 ${mod>=0?'+':'−'} ${Math.abs(mod)} vs DC ${dc}${infoIcon('Kingdom Check')}</span></div>
       ${sourceTags(parts)}
       ${buildingAdv ? `<div class="hint">Advantage from ${escapeHtml(buildingAdv)} — roll twice, keep the higher.</div>` : ''}
       ${!buildingAdv && state.advantages>0 ? `<label class="hint" style="display:flex;gap:6px;align-items:center;"><input type="checkbox" ${c.useBanked?'checked':''} onchange="pendingCheck.useBanked=this.checked;renderCheckDialog();"> Spend a banked Advantage (${state.advantages} left)</label>` : ''}
@@ -1093,7 +1100,7 @@ function finishCheck(nat, other){
   const total = nat + mod;
   const dc = kingdomDC();
   const degree = degreeOf(nat, total, dc);
-  const roll = {nat, other, mod, total, dc, virtue:c.virtueChosen, text:`${VIRTUE_SHORT[c.virtueChosen]} ${nat}${other!==null?` (other ${other})`:''} ${fmt(mod)} = ${total} vs DC ${dc}`};
+  const roll = {nat, other, mod, total, dc, virtue:c.virtueChosen, text:`${c.virtueChosen} ${nat}${other!==null?` (other ${other})`:''} ${fmt(mod)} = ${total} vs DC ${dc}`};
   pendingCheck = null;
   closeOverlay('check-overlay');
   c.onResolve(degree, roll);
@@ -1169,7 +1176,7 @@ function draftPreview(){
   const saved = state;
   state = DEFAULT_STATE();
   state.creation = {charter:draft.charter, charterVirtue:draft.charterVirtue, heartland:draft.heartland, government:draft.government, bonusVirtue:draft.bonusVirtue};
-  const html = `<div class="draft-preview">${VIRTUES.map(v=>`<div><span>${VIRTUE_SHORT[v]}</span><b>${virtueValue(v)}</b><i>${flawValue(FLAW_OF[v])||''}</i></div>`).join('')}</div>
+  const html = `<div class="draft-preview full">${VIRTUES.map(v=>`<div><span>${v}</span><b>${virtueValue(v)}</b><i>${flawValue(FLAW_OF[v])||''}</i></div>`).join('')}</div>
     <div class="hint" style="margin-top:4px;text-align:center;">Virtue on top, opposing flaw underneath — everything starts at 0.</div>`;
   state = saved;
   return html;
@@ -1367,7 +1374,7 @@ function attentionItems(){
   const items = [];
   if(!capitalHex()) items.push(`Your capital isn't on the map yet. <span class="loc-link" onclick="startPickCapital()">Place it now</span>`);
   else if(!state.foundingResourceDone) items.push(`Founding step 8: place one resource building next to your capital, or take a Trade Agreement. <span class="loc-link" onclick="openFoundingResource()">Do it now</span>`);
-  if(state.pendingBoostLevels.length) items.push(`You have ${state.pendingBoostLevels.length} Ability +2 to choose. <span class="loc-link" onclick="switchTab('abilities')">Choose</span>`);
+  if(state.pendingBoostLevels.length) items.push(`You have ${state.pendingBoostLevels.length} Ability +2 to choose — add 2 to one Virtue. <span class="loc-link" onclick="switchTab('abilities')">Choose</span>`);
   if(state.xp>=XP_PER_LEVEL && state.level<20) items.push(`You have ${state.xp} XP — ready to reach level ${state.level+1}. <span class="loc-link" onclick="doLevelUp()">Level up</span>`);
   flawsOverRuin().forEach(f=>items.push(`<b>${f}</b> is ${flawValue(f)}, above the Ruin threshold of ${ruinThreshold()} — a Kingdom Event occurs. <span class="loc-link" onclick="switchTab('abilities')">See ${f}</span>`));
   const size = kingdomSize();
@@ -1456,10 +1463,14 @@ function renderOverview(){
       </div>
       ${state.xp>=XP_PER_LEVEL && state.level<20 ? `<button class="action" style="background:var(--gold);color:var(--bg);border-color:var(--gold);margin-top:10px;" onclick="doLevelUp()">↑ Level Up to ${state.level+1}</button>` : ''}
       ${(state.xpLog||[]).length ? `<div class="divider"></div>${state.xpLog.slice(0,6).map(x=>`<div class="hint" style="margin-top:2px;">Turn ${x.turn}: +${x.amt} — ${escapeHtml(x.reason)}</div>`).join('')}` : ''}
-      <div class="two-col" style="margin-top:10px;">
-        <div><div class="hint" style="margin-top:0;">Set XP</div><input class="num" type="number" value="${state.xp}" onchange="state.xp=Math.max(0,parseInt(this.value)||0);scheduleSave();render();"></div>
-        <div><div class="hint" style="margin-top:0;">Set Level</div><input class="num" type="number" min="1" max="20" value="${state.level}" onchange="setLevelDirect(this.value)"></div>
-      </div>
+      <details class="gm-adjust">
+        <summary>Correct XP or level by hand (GM only)</summary>
+        <div class="hint" style="margin-top:4px;">Only to fix a mistake — normal play adds XP above and levels up with the button.</div>
+        <div class="two-col" style="margin-top:8px;">
+          <div><div class="hint" style="margin-top:0;">Set XP</div><input class="num" type="number" value="${state.xp}" onchange="state.xp=Math.max(0,parseInt(this.value)||0);scheduleSave();render();"></div>
+          <div><div class="hint" style="margin-top:0;">Set Level</div><input class="num" type="number" min="1" max="20" value="${state.level}" onchange="setLevelDirect(this.value)"></div>
+        </div>
+      </details>
     </div>
 
     <div class="card">
@@ -1525,7 +1536,7 @@ function doLevelUp(){
     <h3>Level ${state.level}!</h3>
     <div class="hint" style="margin-top:0;">${escapeHtml(row.boon)}.</div>
     <div class="hint">Kingdom DC is now <b>${row.dc}</b> and the Ruin threshold is <b>${row.ruin}</b>.</div>
-    ${row.virtueBoost ? `<div class="hint" style="margin-top:10px;">Choose a virtue for your +2:</div>${VIRTUES.map(v=>`<button class="option-card" style="padding:9px 12px;margin-bottom:6px;" onclick="chooseBoost(${state.level},'${v}');closeOverlay('levelup-overlay');"><div class="opt-name" style="font-size:13px;">${v} <span class="mono" style="float:right;">${virtueValue(v)} → ${virtueValue(v)+2}</span></div></button>`).join('')}<button class="ghost" onclick="closeOverlay('levelup-overlay');render();">Decide later</button>` : `<button class="action" style="margin-top:10px;" onclick="closeOverlay('levelup-overlay');render();">OK</button>`}
+    ${row.virtueBoost ? `<div class="hint" style="margin-top:10px;">Ability +2 — choose a Virtue to raise by 2:</div>${VIRTUES.map(v=>`<button class="option-card" style="padding:9px 12px;margin-bottom:6px;" onclick="chooseBoost(${state.level},'${v}');closeOverlay('levelup-overlay');"><div class="opt-name" style="font-size:13px;">${v} <span class="mono" style="float:right;">${virtueValue(v)} → ${virtueValue(v)+2}</span></div></button>`).join('')}<button class="ghost" onclick="closeOverlay('levelup-overlay');render();">Decide later</button>` : `<button class="action" style="margin-top:10px;" onclick="closeOverlay('levelup-overlay');render();">OK</button>`}
   `, 120);
   render();
 }
@@ -1542,7 +1553,7 @@ function renderVirtuesTab(){
   const el = document.getElementById('tab-abilities');
   const ruin = ruinThreshold();
   el.innerHTML = `
-    ${state.pendingBoostLevels.length ? `<div class="card attention-card"><h3>Choose your Ability +2</h3>
+    ${state.pendingBoostLevels.length ? `<div class="card attention-card"><h3>Choose your Ability +2</h3><div class="hint" style="margin-top:0;">Pick one Virtue to raise by 2.</div>
       ${state.pendingBoostLevels.slice().sort((a,b)=>a-b).map(l=>`<div class="hint" style="margin-top:6px;">Level ${l}:</div>${virtuePicker('', 'chooseBoost.bind(null,'+l+')')}`).join('')}
     </div>` : ''}
     <div class="card">
@@ -1600,7 +1611,7 @@ function renderCouncilTab(){
     </div>
     ${COUNCIL_ROLES.map(role=>{
       const seat = state.council[role];
-      const area = role==='Counselor' ? 'all checks' : role==='Emissary' ? 'diplomacy & spying actions' : (Object.keys(VIRTUE_COUNCILOR).find(v=>VIRTUE_COUNCILOR[v]===role)||'') + ' checks';
+      const area = seatArea(role);
       return `<div class="card council-card">
         <div class="card-head-row"><h3 style="margin-bottom:0;">${role}${infoIcon(role)}</h3><span class="pill">${area}</span></div>
         <select style="width:100%;margin-top:8px;" onchange="seatCouncilor('${role}', this.value)">
@@ -2122,30 +2133,105 @@ function openTurnGuide(){
   renderTurnGuide();
 }
 function closeTurnGuide(){ closeOverlay('turn-overlay'); render(); }
-function turnGoTo(n){ state.turnState.step = Math.max(1, Math.min(10, n)); scheduleSave(); renderTurnGuide(); }
+function turnGoTo(n){
+  const ts = state.turnState;
+  ts.step = Math.max(1, Math.min(10, n));
+  ts.reached = Math.max(ts.reached||1, ts.step);
+  scheduleSave(); renderTurnGuide();
+  const card = document.querySelector('#turn-overlay .card'); if(card) card.scrollTop = 0;
+}
 function markStepDone(n){ state.turnState.done[n] = true; }
 function turnNote(text){ state.turnState.notes.push({step:state.turnState.step, text}); }
+// Next only moves on — a step counts as done when its roll/payment/actions are
+// actually done, so the numbered dots never show a skipped step as finished.
+function turnNext(n){ if(n===1) markStepDone(1); turnGoTo(n+1); }
+function plural(n, word){ return `${n} ${word}${n===1?'':'s'}`; }
+// For each step: done? and, if not, what's still to do. "required" steps are
+// the ones the rules sheet makes happen every turn (event, taxes, resources,
+// army cost); the rest are actions the kingdom may choose to use.
+function turnStepState(n){
+  const ts = state.turnState;
+  const hasUnits = state.armies.some(a=>a.units.length);
+  switch(n){
+    case 1: return {done:!!ts.done[1]};
+    case 2: { const d = !!(ts.eventRoll || ts.done[2]); return {done:d, required:true, todo:'Roll the Random Kingdom Event (d100)'}; }
+    case 3: { const d = !!ts.taxes || taxDiceCount()===0; return {done:d, required:true, todo:'Collect Taxes — roll the Economy check for Gold'}; }
+    case 4: {
+      const target = Math.min(resourceChoicesPerTurn(), COMMODITIES.filter(g=>producerCount(g)>0).length);
+      const left = target - ts.collected.length;
+      return {done:left<=0, required:true, todo:`Collect Resources — ${plural(left,'roll')} left`};
+    }
+    case 5: return {done:!!ts.resourceAction, todo:'Resource Action'};
+    case 6: { const left = leadershipActionsPerTurn() - ts.used.leadership; return {done:left<=0, todo:plural(left,'Leadership Action')}; }
+    case 7: { const left = hexActionsPerTurn() - ts.used.hex; return {done:left<=0, todo:plural(left,'Hex Action')}; }
+    case 8: { const left = Math.min(buildingSettlementsPerTurn(), state.settlements.length) - ts.used.building; return {done:left<=0, todo:plural(left,'Building Action')}; }
+    case 9: { const d = !!ts.armyCost || !hasUnits; return {done:d, required:true, todo:'Pay Army Cost — your units need Gold and Food'}; }
+    case 10: { const left = armyActionsPerTurn() - ts.used.army; return {done:left<=0 || !state.armies.length, todo:plural(left,'Army Action')}; }
+  }
+  return {done:true};
+}
+// Steps 6, 7, 8 and 10 have long lists — keep "how many left" next to the buttons.
+function turnStepCounter(n){
+  const ts = state.turnState;
+  if(n===6) return counterLine(ts.used.leadership, leadershipActionsPerTurn(), 'Leadership Action'+(leadershipActionsPerTurn()>1?'s':''));
+  if(n===7) return counterLine(ts.used.hex, hexActionsPerTurn(), 'Hex Action'+(hexActionsPerTurn()>1?'s':''));
+  if(n===10 && state.armies.length) return counterLine(ts.used.army, armyActionsPerTurn(), 'Army Action'+(armyActionsPerTurn()>1?'s':''));
+  return '';
+}
 function renderTurnGuide(){
   const ts = state.turnState; if(!ts) return;
   const n = ts.step;
+  ts.reached = Math.max(ts.reached||1, n);
   const body = ({1:stepCouncil, 2:stepEvent, 3:stepTaxes, 4:stepCollect, 5:stepResourceAction, 6:stepLeadership, 7:stepHex, 8:stepBuilding, 9:stepArmyCost, 10:stepArmyActions})[n]();
+  const here = turnStepState(n);
+  const dots = TURN_STEPS.slice(1).map((s,i)=>{
+    const k = i+1, st = turnStepState(k);
+    const missed = st.required && !st.done && k<ts.reached && k!==n;
+    return `<button class="${k===n?'active':''} ${st.done?'done':''} ${missed?'missed':''}" onclick="turnGoTo(${k})" title="${s.title}${missed?' — not done yet':''}">${k}</button>`;
+  }).join('');
   const html = `
-    <div class="turn-head">
-      <div><div class="eyebrow" style="margin:0;">Kingdom Turn ${state.turn}</div><h3 style="margin:2px 0 0;">${n}. ${TURN_STEPS[n].title}</h3></div>
-      <button class="small-ghost" onclick="closeTurnGuide()">Close</button>
+    <div class="turn-sticky">
+      <div class="turn-head">
+        <div><div class="eyebrow" style="margin:0;">Kingdom Turn ${state.turn}</div><h3 style="margin:2px 0 0;">${n}. ${TURN_STEPS[n].title}</h3></div>
+        <button class="small-ghost" onclick="closeTurnGuide()">Close</button>
+      </div>
+      <div class="turn-dots">${dots}</div>
+      ${turnStepCounter(n)}
     </div>
-    <div class="turn-dots">${TURN_STEPS.slice(1).map((s,i)=>`<button class="${i+1===n?'active':''} ${ts.done[i+1]?'done':''}" onclick="turnGoTo(${i+1})" title="${s.title}">${i+1}</button>`).join('')}</div>
     <div class="turn-body">${body}</div>
-    <div class="creation-nav" style="margin-top:14px;">
+    ${here.required && !here.done ? `<div class="hint turn-todo">Not done yet: ${here.todo}. You can move on and come back — Finish Turn will remind you.</div>` : ''}
+    <div class="creation-nav turn-nav">
       <button class="ghost" ${n===1?'disabled style="opacity:.4;"':''} onclick="turnGoTo(${n-1})">Back</button>
-      ${n<10 ? `<button class="action" onclick="markStepDone(${n});turnGoTo(${n+1})">Next: ${TURN_STEPS[n+1].short}</button>` : `<button class="action" onclick="finishTurn()">Finish Turn ${state.turn}</button>`}
+      ${n<10 ? `<button class="action" onclick="turnNext(${n})">Next: ${TURN_STEPS[n+1].short}</button>` : `<button class="action" onclick="finishTurn()">Finish Turn ${state.turn}</button>`}
     </div>`;
   const existing = document.getElementById('turn-overlay');
   if(existing){ existing.querySelector('.card').innerHTML = html; return; }
   openOverlay('turn-overlay', html, 105);
 }
-function finishTurn(){
+// Before closing the turn: list anything the rules require that wasn't done,
+// plus actions left unused, and let the player go back or finish anyway.
+function finishTurn(force){
   const ts = state.turnState;
+  if(!force){
+    const missing = [], unused = [];
+    for(let k=1;k<=10;k++){
+      const st = turnStepState(k);
+      if(st.done) continue;
+      if(st.required) missing.push(k);
+      else if(k>=5) unused.push(st.todo);
+    }
+    if(missing.length || unused.length){
+      openOverlay('finish-overlay', `
+        <h3>Finish Turn ${state.turn}?</h3>
+        ${missing.length ? `<div class="hint" style="margin-top:0;color:var(--rust);">Not done yet — the rules have these happen every turn:</div>
+          ${missing.map(k=>`<button class="option-card" style="padding:9px 12px;margin-bottom:6px;" onclick="closeOverlay('finish-overlay');turnGoTo(${k})"><div class="opt-name" style="font-size:13px;">${k}. ${TURN_STEPS[k].title}</div><div class="opt-detail">${turnStepState(k).todo} · tap to go there</div></button>`).join('')}` : ''}
+        ${unused.length ? `<div class="hint">Unused this turn (optional — they don't carry over): ${unused.join(', ')}.</div>` : ''}
+        <button class="action" style="margin-top:10px;" onclick="closeOverlay('finish-overlay')">Go back</button>
+        <button class="ghost" style="margin-top:8px;" onclick="closeOverlay('finish-overlay');finishTurn(true)">Finish anyway</button>
+      `, 115);
+      return;
+    }
+  }
   const summary = (ts.notes||[]).map(x=>x.text);
   addLog(`Turn ${state.turn} complete.${summary.length?' '+summary.join(' · '):''}`);
   state.turn += 1;
@@ -2167,12 +2253,12 @@ function stepCouncil(){
   return `${stepTag('auto','Review')}
     <div class="hint" style="margin-top:6px;">Confirm your councilors — swap anyone you want. Level up your kingdom if you have the XP.</div>
     <table class="lead-table" style="margin-top:8px;"><tbody>${COUNCIL_ROLES.map(r=>`<tr><td>${r}</td><td>${state.council[r].holder?escapeHtml(seatHolderName(r)):'<span style="color:var(--rust);">Vacant</span>'}</td><td class="mono">${state.council[r].holder?fmt(seatBonus(r)):''}</td></tr>`).join('')}</tbody></table>
-    ${vacant.length ? `<div class="hint" style="color:var(--rust);">${vacant.length} seat${vacant.length>1?'s are':' is'} vacant — no bonus on ${vacant.join(', ')} checks.</div>` : ''}
+    ${vacant.length ? `<div class="hint" style="color:var(--rust);">Empty seat${vacant.length>1?'s':''} — these rolls get no councilor bonus: ${vacant.map(r=>`<b>${seatArea(r)}</b> (${r})`).join(', ')}.</div>` : ''}
     <button class="ghost" style="margin-top:8px;" onclick="closeOverlay('turn-overlay');switchTab('leaders');">Change councilors</button>
     <div class="divider"></div>
     <div class="hint" style="margin-top:0;">Level ${state.level} · ${state.xp} / ${XP_PER_LEVEL} XP</div>
     ${state.xp>=XP_PER_LEVEL && state.level<20 ? `<button class="action" onclick="doLevelUp()">↑ Level up to ${state.level+1}</button>` : ''}
-    ${state.pendingBoostLevels.length ? `<div class="hint" style="color:var(--gold);">You still have an Ability +2 to choose (Virtues tab).</div>` : ''}`;
+    ${state.pendingBoostLevels.length ? `<div class="hint" style="color:var(--gold);">You still have an Ability +2 to choose — add 2 to one Virtue on the Virtues tab.</div>` : ''}`;
 }
 
 /* ---------- 2. Random event ---------- */
@@ -2311,13 +2397,12 @@ function stepLeadership(){
   const extra = buildingCountWithFlag('leadershipAction');
   return `${stepTag('check','Choose & check')}
     <div class="hint" style="margin-top:6px;">${max} Leadership Action${max>1?'s':''} (level ${lvl()>=7?'7: 2':'1: 1'}${extra?` + ${extra} from Keep/Castle/Palace`:''}).</div>
-    ${counterLine(ts.used.leadership, max, 'Leadership Action'+(max>1?'s':''))}
     ${Object.entries(LEADERSHIP_ACTIONS).map(([name,a])=>{
       const missing = missingFor(a.cost);
       const advSrc = advantageSourceFor(name);
       const blocked = left<=0 || missing.length;
       return `<button class="option-card ${blocked?'locked':''}" style="padding:9px 12px;margin-bottom:6px;" ${blocked?'':`onclick="startLeadership('${jsArg(name)}')"`}>
-        <div class="opt-name" style="font-size:13px;">${name} ${a.check?`<span class="pill" style="font-size:10px;">${VIRTUE_SHORT[a.check]}${a.altCheck?' or '+VIRTUE_SHORT[a.altCheck]:''}</span>`:''}${a.cost?` <span class="pill" style="font-size:10px;">${formatCost(a.cost)}</span>`:''}</div>
+        <div class="opt-name" style="font-size:13px;">${name} ${a.check?`<span class="pill" style="font-size:10px;">${a.check}${a.altCheck?' or '+a.altCheck:''}</span>`:''}${a.cost?` <span class="pill" style="font-size:10px;">${formatCost(a.cost)}</span>`:''}</div>
         <div class="opt-detail">${a.desc}${advSrc?` Advantage from ${escapeHtml(advSrc)}.`:''}${missing.length?`<br><span style="color:var(--rust);">Needs ${formatCost(a.cost)}.</span>`:''}</div>
       </button>`;
     }).join('')}
@@ -2416,7 +2501,6 @@ function stepHex(){
   const left = max - ts.used.hex;
   return `${stepTag('check','Stability checks')}
     <div class="hint" style="margin-top:6px;">${max} Hex Action${max>1?'s':''} this turn. Each is a Stability check; costs are paid whatever the result.</div>
-    ${counterLine(ts.used.hex, max, 'Hex Action'+(max>1?'s':''))}
     ${Object.entries(HEX_ACTIONS).map(([name,a])=>{
       const missing = name==='Build Roads' && state.roads ? [] : missingFor(a.cost);
       const blocked = left<=0 || missing.length || (name==='Build Roads' && state.roads);
@@ -2611,7 +2695,6 @@ function stepArmyActions(){
   const left = max - ts.used.army;
   return `${stepTag('check','Might checks')}
     <div class="hint" style="margin-top:6px;">${max} Army Action${max>1?'s':''} this turn (Might check, General's bonus).</div>
-    ${counterLine(ts.used.army, max, 'Army Action'+(max>1?'s':''))}
     ${Object.entries(ARMY_ACTIONS).map(([name,a])=>`<button class="option-card ${left<=0?'locked':''}" style="padding:9px 12px;margin-bottom:6px;" ${left<=0?'':`onclick="startArmyAction('${jsArg(name)}')"`}>
       <div class="opt-name" style="font-size:13px;">${name}</div><div class="opt-detail">${a.desc}${advantageSourceFor(name)?` Advantage from ${escapeHtml(advantageSourceFor(name))}.`:''}</div></button>`).join('')}
     ${ts.notes.filter(x=>x.step===10).map(x=>`<div class="hint">✓ ${escapeHtml(x.text)}</div>`).join('')}`;
